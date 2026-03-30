@@ -66,6 +66,7 @@ def register_customer(full_name, email, password, otp, phone=None):
         user.mobile_no = phone or ""
         user.send_welcome_email = 0
         user.enabled = 1
+        user.append("roles", {"role": "Customer"})
         user.insert(ignore_permissions=True)
         update_password(email, password)
 
