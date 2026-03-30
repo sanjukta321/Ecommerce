@@ -4,9 +4,9 @@ from frappe.utils.password import update_password
 
 
 @frappe.whitelist(allow_guest=True)
-def send_registration_otp(email, full_name):
-    if not email or not full_name:
-        frappe.throw("Email and Full Name are required.")
+def send_registration_otp(email):
+    if not email:
+        frappe.throw("Email is required.")
 
     if frappe.db.exists("User", email):
         frappe.throw("An account with this email already exists.")
