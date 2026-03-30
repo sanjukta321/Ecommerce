@@ -22,8 +22,9 @@ class TestSendRegistrationOtp(unittest.TestCase):
             frappe.delete_doc("User", TEST_EMAIL, force=True)
         for c in frappe.get_all("Customer", filters={"customer_name": TEST_NAME}):
             frappe.delete_doc("Customer", c.name, force=True)
-        for c in frappe.get_all("Contact", filters={"email_id": TEST_EMAIL}):
-            frappe.delete_doc("Contact", c.name, force=True)
+        for ce in frappe.get_all("Contact Email", filters={"email_id": TEST_EMAIL}, fields=["parent"]):
+            if frappe.db.exists("Contact", ce.parent):
+                frappe.delete_doc("Contact", ce.parent, force=True)
         frappe.db.commit()
 
     @patch("frappe.sendmail")
@@ -81,8 +82,9 @@ class TestRegisterCustomer(unittest.TestCase):
             frappe.delete_doc("User", TEST_EMAIL, force=True)
         for c in frappe.get_all("Customer", filters={"customer_name": TEST_NAME}):
             frappe.delete_doc("Customer", c.name, force=True)
-        for c in frappe.get_all("Contact", filters={"email_id": TEST_EMAIL}):
-            frappe.delete_doc("Contact", c.name, force=True)
+        for ce in frappe.get_all("Contact Email", filters={"email_id": TEST_EMAIL}, fields=["parent"]):
+            if frappe.db.exists("Contact", ce.parent):
+                frappe.delete_doc("Contact", ce.parent, force=True)
         frappe.db.commit()
 
     def _seed_otp(self, otp="123456"):
