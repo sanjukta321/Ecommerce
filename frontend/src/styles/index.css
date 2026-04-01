@@ -1,0 +1,170 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root[data-theme='dark'],
+:root {
+  --primary: #0a0a0a;
+  --primary-light: #1a1a1a;
+  --accent: #F7C948;
+  --accent-gold: #C0A04D;
+  --text-main: #E6F1FF;
+  --text-dim: #8892B0;
+  --bg-main: #000000;
+  --white: #FFFFFF;
+  --glass: rgba(20, 20, 20, 0.95);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.9);
+  --transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+
+:root[data-theme='light'] {
+  --primary: #E6F1FF;
+  --primary-light: #f0f7ff;
+  --accent: #b31560;
+  /* Using the pink color as accent in light mode for better contrast */
+  --accent-gold: #d11a70;
+  --text-main: #0A192F;
+  --text-dim: #4A5568;
+  --bg-main: #FFFFFF;
+  --white: #000000;
+  --glass: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(200, 200, 200, 0.3);
+  --shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  line-height: 1.6;
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: block;
+  /* Ensure it's not flex from other files */
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: var(--transition);
+}
+
+ul {
+  list-style: none;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+  /* Increased padding for better breathing room */
+}
+
+@media (min-width: 1600px) {
+  .container {
+    max-width: 1400px;
+  }
+}
+
+.glass-effect {
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+.premium-btn {
+  padding: 12px 24px;
+  background: var(--accent);
+  color: var(--bg-main);
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.premium-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(247, 201, 72, 0.4);
+  background: var(--accent-gold);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-light);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.8s forwards;
+}
+
+.App {
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+}
+
+.store-page {
+  padding-top: 100px;
+  min-height: 80vh;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+@media (max-width: 992px) {
+  .store-page {
+    padding-top: 90px;
+  }
+}
+
+@media (min-width: 1600px) {
+  body {
+    font-size: 18px;
+    /* Slightly larger text for high-res screens */
+  }
+}

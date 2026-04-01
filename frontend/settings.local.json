@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp -r \"/mnt/c/Users/sanju/Documents/ags workspace/ec-store\" ~/ec-store && echo \"Done\")"
+    ]
+  }
+}

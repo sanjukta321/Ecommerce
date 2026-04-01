@@ -1,0 +1,12 @@
+.home-page {
+    min-height: 100vh;
+    padding-top: 80px;
+    width: 100%;
+    overflow-x: hidden;
+}
+
+@media (max-width: 992px) {
+    .home-page {
+        padding-top: 70px;
+    }
+}

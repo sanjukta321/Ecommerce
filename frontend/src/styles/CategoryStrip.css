@@ -1,0 +1,38 @@
+.category-strip {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 40px auto;
+}
+
+.category-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    cursor: pointer;
+    transition: var(--transition);
+    border-radius: 50px;
+}
+
+.category-item:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: translateY(-5px);
+}
+
+.category-item:hover .cat-name,
+.category-item:hover .cat-icon {
+    color: var(--bg-main);
+}
+
+.cat-icon {
+    font-size: 20px;
+}
+
+.cat-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-main);
+}

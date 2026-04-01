@@ -1,0 +1,103 @@
+.deal-fab {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    width: 200px;
+    padding: 20px;
+    z-index: 1000;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--accent);
+    animation: bounceIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes bounceIn {
+    from {
+        opacity: 0;
+        transform: scale(0.5) translateY(100px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.close-fab {
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.deal-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--bg-main);
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.deal-content h4 {
+    font-size: 14px;
+    margin-bottom: 5px;
+    color: var(--text-main);
+}
+
+.deal-content p {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 15px;
+}
+
+.old-price {
+    font-size: 12px;
+    text-decoration: line-through;
+    color: var(--text-dim);
+    margin-left: 5px;
+    font-weight: 400;
+}
+
+.grab-btn {
+    width: 100%;
+    padding: 8px;
+    background: var(--accent);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.grab-btn:hover {
+    filter: brightness(1.1);
+}
+
+@media (max-width: 992px) {
+    .deal-fab {
+        bottom: 20px;
+        right: 20px;
+        width: 150px;
+        padding: 12px;
+        transform: scale(0.9);
+    }
+}
+
+@media (max-width: 768px) {
+    .deal-fab {
+        bottom: 20px;
+        right: 20px;
+        width: 160px;
+        padding: 15px;
+    }
+}

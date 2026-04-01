@@ -1,0 +1,282 @@
+.profile-page {
+    padding-top: 120px;
+    background: var(--bg-main);
+    min-height: 100vh;
+}
+
+.profile-container {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+    padding-bottom: 60px;
+}
+
+.profile-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.card {
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* User Greeting */
+.user-greeting {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+}
+
+.avatar img {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+}
+
+.greeting-text .hello {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.greeting-text h3 {
+    font-size: 18px;
+    margin: 0;
+    color: var(--text-main);
+}
+
+/* Sidebar Menu */
+.sidebar-menu {
+    border-radius: 12px;
+}
+
+.menu-group {
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.menu-group:last-child {
+    border-bottom: none;
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+    cursor: pointer;
+    transition: var(--transition);
+    color: var(--text-dim);
+    font-weight: 600;
+}
+
+.group-header svg {
+    color: var(--accent);
+}
+
+.group-header span {
+    flex: 1;
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+.group-header.active {
+    color: var(--accent);
+}
+
+.group-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.group-links {
+    list-style: none;
+    padding: 5px 0 15px 0;
+    margin: 0;
+}
+
+.group-links li {
+    padding: 12px 20px 12px 55px;
+    font-size: 14px;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: var(--transition);
+    opacity: 0.8;
+}
+
+.group-links li:hover {
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.05);
+    padding-left: 60px;
+    opacity: 1;
+}
+
+.group-links li.active {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--accent);
+    font-weight: 600;
+    opacity: 1;
+}
+
+.balance {
+    float: right;
+    color: #4ade80;
+    font-weight: 700;
+}
+
+.logout {
+    color: #ff4d4d !important;
+}
+
+/* Frequent Visited */
+.frequent-visited {
+    padding: 20px;
+}
+
+.frequent-visited .label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.visited-links {
+    display: flex;
+    gap: 20px;
+}
+
+.visited-links span {
+    font-size: 13px;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+/* Main Content */
+.profile-content {
+    padding: 40px;
+}
+
+.profile-section {
+    margin-bottom: 40px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.section-header h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-main);
+}
+
+.edit-btn {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 700px;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 14px 18px;
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    font-size: 15px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-main);
+    cursor: not-allowed;
+    transition: var(--transition);
+}
+
+.full-width {
+    max-width: 350px;
+}
+
+.gender-selection {
+    margin-top: 30px;
+}
+
+.gender-selection p {
+    font-size: 15px;
+    margin-bottom: 15px;
+    color: var(--text-main);
+    font-weight: 500;
+}
+
+.radio-group {
+    display: flex;
+    gap: 40px;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    cursor: pointer;
+    color: var(--text-main);
+}
+
+.radio-label input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--accent);
+}
+
+/* FAQs */
+.faqs-section {
+    border-top: 1px solid var(--glass-border);
+    padding-top: 40px;
+}
+
+.faqs-section h2 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 30px;
+    color: var(--text-main);
+}
+
+.faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.faq-item h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--accent);
+}
+
+.faq-item p {
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--text-dim);
+}
+
+@media (max-width: 992px) {
+    .profile-container {
+        grid-template-columns: 1fr;
+    }
+}
