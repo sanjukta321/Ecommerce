@@ -56,13 +56,44 @@ app_license = "mit"
 # Home Pages
 # ----------
 
-# application home page (will override Website Settings)
-# home_page = "login"
+# Serve the React SPA at /
+home_page = "index"
 
 # website user home page (by Role)
 # role_home_page = {
 # 	"Role": "home_page"
 # }
+
+# SPA routing — all React Router paths serve the same index.html shell.
+# React then handles client-side navigation.
+website_route_rules = [
+    # Store pages
+    {"from_route": "/electronics", "to_route": "index"},
+    {"from_route": "/fashion", "to_route": "index"},
+    {"from_route": "/fashion/<path:name>", "to_route": "index"},
+    {"from_route": "/furniture", "to_route": "index"},
+    {"from_route": "/books", "to_route": "index"},
+    {"from_route": "/sports", "to_route": "index"},
+    {"from_route": "/accessories", "to_route": "index"},
+    {"from_route": "/product/<path:name>", "to_route": "index"},
+    {"from_route": "/offers", "to_route": "index"},
+    {"from_route": "/new-arrivals", "to_route": "index"},
+    {"from_route": "/search", "to_route": "index"},
+    {"from_route": "/account", "to_route": "index"},
+    {"from_route": "/profile", "to_route": "index"},
+    {"from_route": "/login", "to_route": "index"},
+    {"from_route": "/cart", "to_route": "index"},
+    {"from_route": "/wishlist", "to_route": "index"},
+    {"from_route": "/orders", "to_route": "index"},
+    {"from_route": "/checkout", "to_route": "index"},
+    {"from_route": "/become-seller", "to_route": "index"},
+    # Seller portal
+    {"from_route": "/seller", "to_route": "index"},
+    {"from_route": "/seller/<path:name>", "to_route": "index"},
+    # Admin portal
+    {"from_route": "/admin", "to_route": "index"},
+    {"from_route": "/admin/<path:name>", "to_route": "index"},
+]
 
 # Generators
 # ----------
