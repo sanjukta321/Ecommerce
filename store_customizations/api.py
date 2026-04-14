@@ -330,21 +330,48 @@ def get_all_products(item_group=None, limit=100):
 #  Standard CRUD uses /api/resource/Sales Order directly.
 # ─────────────────────────────────────────────
 
-# Example — uncomment and customise when needed:
-#
-# @frappe.whitelist()
-# def get_my_orders():
-#     """Return orders for the currently logged-in customer."""
-#     customer = frappe.db.get_value("Customer", {"email_id": frappe.session.user}, "name")
-#     if not customer:
-#         return []
-#     return frappe.get_list(
-#         "Sales Order",
-#         filters={"customer": customer},
-#         fields=["name", "grand_total", "status", "transaction_date"],
-#         order_by="transaction_date desc",
-#         limit=50,
-#     )
+@frappe.whitelist(allow_guest=True)
+def get_my_orders(mobile=None):
+    """
+    Return Sales Orders with their line items for the current customer.
+    Works for both logged-in users (by email) and guests (by mobile number).
+    """
+    customer = None
+
+    # Logged-in Frappe user
+    user = frappe.session.user
+    if user and user not in ("Guest", "Administrator"):
+        customer = frappe.db.get_value("Customer", {"email_id": user}, "name")
+
+    # Guest identified by mobile
+    if not customer and mobile:
+        customer = frappe.db.get_value("Customer", {"mobile_no": str(mobile)}, "name")
+
+    if not customer:
+        return []
+
+    orders = frappe.get_list(
+        "Sales Order",
+        filters={"customer": customer, "docstatus": ["!=", 2]},
+        fields=["name", "grand_total", "status", "transaction_date", "delivery_date"],
+        order_by="transaction_date desc",
+        limit=50,
+    )
+
+    # Attach line items to each order
+    for order in orders:
+        items = frappe.get_all(
+            "Sales Order Item",
+            filters={"parent": order["name"]},
+            fields=["item_code", "item_name", "qty", "rate", "amount", "image"],
+        )
+        # Fallback: use item_code when item_name is blank
+        for item in items:
+            if not item.get("item_name"):
+                item["item_name"] = item.get("item_code", "")
+        order["items"] = items
+
+    return orders
 
 
 # ─────────────────────────────────────────────

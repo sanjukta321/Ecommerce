@@ -116,6 +116,8 @@ const Checkout: React.FC = () => {
             if (data.message?.success) {
                 setOrderId(data.message.sales_order || '');
                 setInvoiceId(data.message.sales_invoice || '');
+                // Persist mobile so Orders page can fetch this customer's orders
+                if (mobile) localStorage.setItem('checkout_mobile', mobile);
                 clearCart();
                 setStep('success');
             } else {
