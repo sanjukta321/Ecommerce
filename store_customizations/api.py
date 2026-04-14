@@ -605,13 +605,16 @@ def place_order(cart_items, address, payment_method, mobile=None):
     # 1. Resolve Customer
     customer = _checkout_resolve_customer(address, mobile)
 
-    # 2. Sales Order (submitted)
-    so = _checkout_create_sales_order(customer, cart_items)
+    # 2. Create / reuse Address record and link to Customer
+    address_name = _checkout_get_or_create_address(customer, address)
 
-    # 3. Sales Invoice (submitted)
+    # 3. Sales Order (submitted)
+    so = _checkout_create_sales_order(customer, cart_items, address_name)
+
+    # 4. Sales Invoice (submitted)
     si = _checkout_create_sales_invoice(so, customer)
 
-    # 4. Payment Entry — only for online payments; soft-fail so order never blocks
+    # 5. Payment Entry — only for online payments; soft-fail so order never blocks
     pe_name = None
     if payment_method != "cod":
         try:
@@ -677,7 +680,55 @@ def _checkout_resolve_customer(address, mobile):
     return cust_doc.name
 
 
-def _checkout_create_sales_order(customer, cart_items):
+def _checkout_get_or_create_address(customer, address):
+    """
+    Create an Address record for the customer if one doesn't already exist
+    with the same pincode+city, then return the address doc name.
+    The same address is used for both billing and shipping on the Sales Order.
+    """
+    pincode = (address.get("pincode") or "").strip()
+    city    = (address.get("city") or "").strip()
+    state   = (address.get("state") or "").strip()
+    line1   = (address.get("addressLine") or "").strip()
+    line2   = (address.get("landmark") or "").strip()
+    title   = (address.get("fullName") or customer).strip()
+
+    # Reuse existing address linked to this customer with same pincode+city
+    existing = frappe.db.get_value(
+        "Dynamic Link",
+        {"link_doctype": "Customer", "link_name": customer, "parenttype": "Address"},
+        "parent",
+    )
+    if existing:
+        addr_doc = frappe.get_doc("Address", existing)
+        # Update fields if they've changed
+        addr_doc.address_line1 = line1 or addr_doc.address_line1
+        addr_doc.address_line2 = line2 or addr_doc.address_line2
+        addr_doc.city          = city  or addr_doc.city
+        addr_doc.state         = state or addr_doc.state
+        addr_doc.pincode       = pincode or addr_doc.pincode
+        addr_doc.save(ignore_permissions=True)
+        return addr_doc.name
+
+    # Create a new Address record
+    addr_doc = frappe.new_doc("Address")
+    addr_doc.address_title = title
+    addr_doc.address_type  = "Billing"
+    addr_doc.address_line1 = line1
+    addr_doc.address_line2 = line2
+    addr_doc.city          = city
+    addr_doc.state         = state
+    addr_doc.country       = "India"
+    addr_doc.pincode       = pincode
+    addr_doc.append("links", {
+        "link_doctype": "Customer",
+        "link_name":    customer,
+    })
+    addr_doc.insert(ignore_permissions=True)
+    return addr_doc.name
+
+
+def _checkout_create_sales_order(customer, cart_items, address_name=None):
     """Create and submit a Sales Order from cart items."""
     delivery_date = frappe.utils.add_days(frappe.utils.today(), 5)
 
@@ -687,6 +738,10 @@ def _checkout_create_sales_order(customer, cart_items):
     so.delivery_date = delivery_date
     so.order_type = "Sales"
     so.ignore_pricing_rule = 1
+
+    if address_name:
+        so.customer_address      = address_name   # billing address
+        so.shipping_address_name = address_name   # shipping address
 
     for item in cart_items:
         item_code = item.get("id") or item.get("item_code")
