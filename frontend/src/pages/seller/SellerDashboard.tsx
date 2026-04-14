@@ -17,13 +17,14 @@ interface Item {
   item_name: string;
   item_group: string;
   standard_rate: number;
+  selling_price?: number;
   actual_qty?: number;
 }
 
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'X-Frappe-CSRF-Token': 'fetch' },
+    headers: { 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
   });
   return res.json() as Promise<T>;
 }
@@ -67,7 +68,7 @@ export default function SellerDashboard() {
             '/api/resource/Sales Order?limit=50&order_by=creation desc&fields=["name","customer","grand_total","status","transaction_date"]'
           ),
           apiFetch<{ data: Item[] }>(
-            '/api/resource/Item?limit=100&fields=["name","item_name","item_group","standard_rate","actual_qty"]'
+            '/api/resource/Item?limit=100&fields=["name","item_name","item_group"]'
           ),
         ]);
         setOrders(ordersRes.data || []);
@@ -89,7 +90,7 @@ export default function SellerDashboard() {
 
   // Top products by revenue approximation (highest rate * some factor)
   const topProducts = [...items]
-    .sort((a, b) => (b.standard_rate || 0) - (a.standard_rate || 0))
+    .sort((a, b) => (b.selling_price ?? b.standard_rate ?? 0) - (a.selling_price ?? a.standard_rate ?? 0))
     .slice(0, 3);
 
   const statusClass = (status: string) => {
@@ -240,7 +241,7 @@ export default function SellerDashboard() {
               <div className="top-product-card" key={product.name}>
                 <div className="top-product-rank">#{idx + 1} Top Product</div>
                 <div className="top-product-name" title={product.item_name}>{product.item_name}</div>
-                <div className="top-product-revenue">{formatINR(product.standard_rate || 0)}</div>
+                <div className="top-product-revenue">{formatINR(product.selling_price ?? product.standard_rate ?? 0)}</div>
                 <div className="top-product-label">Unit Price · {product.item_group}</div>
               </div>
             ))}

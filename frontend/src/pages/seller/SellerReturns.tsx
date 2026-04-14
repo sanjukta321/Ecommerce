@@ -44,7 +44,7 @@ export default function SellerReturns() {
       `${BASE}/api/resource/Sales%20Invoice?fields=["name","return_against","customer","reason_for_return","docstatus","creation"]&filters=[["is_return","=","1"]]&limit=100&order_by=creation desc`,
       {
         credentials: 'include',
-        headers: { 'X-Frappe-CSRF-Token': 'fetch' },
+        headers: { 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
       }
     )
       .then(r => r.json())

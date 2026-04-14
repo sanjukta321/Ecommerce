@@ -5,6 +5,9 @@ Frappe serves this at / (configured via home_page = "index" in hooks.py).
 All React Router paths are redirected here via website_route_rules in hooks.py.
 """
 
+import os
+import frappe
+
 no_cache = 1
 
 
@@ -13,3 +16,17 @@ def get_context(context):
     context.no_sidebar = True
     context.no_header = True
     context.no_breadcrumbs = True
+
+    # Cache-bust the JS/CSS assets using the file's modification timestamp
+    js_path = os.path.join(frappe.get_app_path("store_customizations"), "public", "index.js")
+    try:
+        context.asset_version = int(os.path.getmtime(js_path))
+    except Exception:
+        context.asset_version = 1
+
+    # Inject the session CSRF token so React can send it with POST requests.
+    # Without this, Frappe v15 throws CSRFTokenError on every guest POST.
+    try:
+        context.csrf_token = frappe.local.session.data.csrf_token
+    except Exception:
+        context.csrf_token = ""

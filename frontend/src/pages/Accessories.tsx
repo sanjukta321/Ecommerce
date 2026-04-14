@@ -1,30 +1,36 @@
 import React, { useState } from 'react';
 import Footer from '../components/Footer';
 import ProductCard from '../components/ProductCard';
-import { allProducts } from '../data/allProducts';
+import { useFrappeProducts } from '../hooks/useFrappeProducts';
 import '../styles/ProductListing.css';
 
 const AccessoriesList: React.FC = () => {
     const [selectedSubcategory, setSelectedSubcategory] = useState('All');
     const [sortBy, setSortBy] = useState('popular');
+    const { products: liveProducts, loading } = useFrappeProducts('Accessories');
 
     const subcategories = ['All', 'Watches', 'Sunglasses', 'Bags', 'Jewellery'];
 
+    const KEYWORDS: Record<string, string[]> = {
+        'watches':    ['watch', 'chronograph', 'smartwatch', 'timepiece', 'fastrack', 'titan'],
+        'sunglasses': ['sunglass', 'polarized', 'aviator', 'shade', 'uv', 'wayfarer', 'ray-ban'],
+        'bags':       ['bag', 'handbag', 'tote', 'backpack', 'clutch', 'purse', 'sling'],
+        'jewellery':  ['jewellery', 'jewelry', 'necklace', 'ring', 'bracelet', 'earring', 'gold', 'diamond', 'signature jewellery', 'collection'],
+    };
+
     const filteredProducts = (() => {
-        // Start with all Accessories category products from central data
-        let products = allProducts.filter(p => p.category === 'Accessories');
+        let products = liveProducts;
 
-        // Filter by subcategory tag if not 'All'
         if (selectedSubcategory !== 'All') {
-            const subcatTag = selectedSubcategory.toLowerCase();
-            const singularTag = subcatTag.endsWith('es') ? subcatTag.slice(0, -2) : subcatTag.endsWith('s') ? subcatTag.slice(0, -1) : subcatTag;
-
-            products = products.filter(p =>
-                p.tags?.some(tag => {
-                    const t = tag.toLowerCase();
-                    return t.includes(singularTag) || t.includes(subcatTag);
-                })
-            );
+            const kws = KEYWORDS[selectedSubcategory.toLowerCase()] || [selectedSubcategory.toLowerCase()];
+            products = products.filter(p => {
+                const searchIn = [
+                    (p.name || '').toLowerCase(),
+                    (p.category || '').toLowerCase(),
+                    ...(p.tags || []).map((t: string) => t.toLowerCase()),
+                ];
+                return kws.some(kw => searchIn.some(s => s.includes(kw)));
+            });
         }
 
         // Apply Sorting
@@ -82,13 +88,18 @@ const AccessoriesList: React.FC = () => {
                 </div>
 
                 <div className="products-grid fade-in">
-                    {filteredProducts.map((product) => (
-                        <ProductCard key={product.id} {...product} />
-                    ))}
-                    {filteredProducts.length === 0 && (
+                    {loading ? (
+                        Array.from({ length: 8 }).map((_, i) => (
+                            <div key={i} style={{ background: '#f1f5f9', borderRadius: 12, height: 320, animation: 'shimmer 1.4s infinite' }} />
+                        ))
+                    ) : filteredProducts.length === 0 ? (
                         <div className="no-results" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px 0' }}>
                             <p>No products found in this category.</p>
                         </div>
+                    ) : (
+                        filteredProducts.map((product) => (
+                            <ProductCard key={product.id} {...product} />
+                        ))
                     )}
                 </div>
             </div>

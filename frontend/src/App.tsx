@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { frappeApi } from './api/frappe';
+import { initCsrfToken } from './services/client';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Contact from './pages/Contact';
@@ -51,6 +52,9 @@ function AppInner() {
   });
 
   useEffect(() => {
+    // Pre-fetch CSRF token so POST requests are ready immediately
+    initCsrfToken();
+
     frappeApi.checkSession().then(({ loggedIn }) => {
       if (loggedIn) {
         setIsLoggedIn(true);

@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => ({
     // Output goes directly into the Frappe app's public/ directory.
     // After building, run `bench build --app store_customizations` to copy
     // assets to sites/assets/store_customizations/ where Frappe serves them.
-    outDir: '../frappe-bench/apps/store_customizations/store_customizations/public',
+    outDir: '../store_customizations/public',
     // Don't wipe the whole public/ dir — it contains existing css/ and js/ subdirs
     emptyOutDir: false,
     rollupOptions: {

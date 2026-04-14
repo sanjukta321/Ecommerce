@@ -16,8 +16,10 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
     const [suggestions, setSuggestions] = useState<Product[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
+    const [showAccountDropdown, setShowAccountDropdown] = useState(false);
     const navigate = useNavigate();
     const { cartCount } = useCart();
+    const accountDropdownRef = React.useRef<HTMLDivElement>(null);
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         const savedTheme = localStorage.getItem('theme');
         return (savedTheme as 'light' | 'dark') || 'dark';
@@ -45,12 +47,15 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
         setActiveIndex(-1);
     }, [searchQuery]);
 
-    // Handle click outside to close suggestions
+    // Handle click outside to close suggestions and account dropdown
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
             if (!target.closest('.search-bar-container')) {
                 setShowSuggestions(false);
+            }
+            if (accountDropdownRef.current && !accountDropdownRef.current.contains(target)) {
+                setShowAccountDropdown(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -250,12 +255,16 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                             </div>
                         </div>
                     ) : (
-                        <div className="account-dropdown-trigger">
-                            <Link to="/profile" className="action-item">
+                        <div className="account-dropdown-trigger" ref={accountDropdownRef}>
+                            <button
+                                className="action-item"
+                                onClick={() => setShowAccountDropdown(prev => !prev)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            >
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                                 <span>Account</span>
-                            </Link>
-                            <div className="account-dropdown glass-effect">
+                            </button>
+                            <div className={`account-dropdown glass-effect${showAccountDropdown ? ' open' : ''}`}>
                                 <div className="dropdown-info">
                                     <h3>Hello, {localStorage.getItem('frappe_user') || 'User'}</h3>
                                     <p>Manage your account & orders</p>
@@ -263,31 +272,31 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                                 <div className="divider"></div>
                                 <ul>
                                     <li>
-                                        <Link to="/profile">
+                                        <Link to="/profile" onClick={() => setShowAccountDropdown(false)}>
                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                                             My Profile
                                         </Link>
                                     </li>
                                     <li>
-                                        <Link to="/orders">
+                                        <Link to="/orders" onClick={() => setShowAccountDropdown(false)}>
                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" /><path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>
                                             Orders
                                         </Link>
                                     </li>
                                     <li>
-                                        <Link to="/wishlist">
+                                        <Link to="/wishlist" onClick={() => setShowAccountDropdown(false)}>
                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
                                             Wishlist
                                         </Link>
                                     </li>
                                     <li>
-                                        <Link to="/profile">
+                                        <Link to="/profile" onClick={() => setShowAccountDropdown(false)}>
                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" /></svg>
                                             Gift Cards
                                         </Link>
                                     </li>
                                     <li>
-                                        <Link to="/profile">
+                                        <Link to="/profile" onClick={() => setShowAccountDropdown(false)}>
                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" /></svg>
                                             Coupons
                                         </Link>
@@ -296,7 +305,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                                         <>
                                             <li className="divider"></li>
                                             <li>
-                                                <Link to="/seller/dashboard" style={{ color: '#6c63ff', fontWeight: 600 }}>
+                                                <Link to="/seller/dashboard" onClick={() => setShowAccountDropdown(false)} style={{ color: '#6c63ff', fontWeight: 600 }}>
                                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                                                     Seller Dashboard
                                                 </Link>
@@ -310,6 +319,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                                             className="logout"
                                             onClick={(e) => {
                                                 e.preventDefault();
+                                                setShowAccountDropdown(false);
                                                 onLogout();
                                                 navigate('/');
                                             }}

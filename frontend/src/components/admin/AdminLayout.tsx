@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink, useNavigate, Navigate } from 'react-router-dom';
 import { frappeApi } from '../../api/frappe';
@@ -13,6 +13,22 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const avatarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleDropdown = () => {
+    setProfileOpen(o => !o);
+  };
 
   const session = localStorage.getItem('admin_session');
   if (!session) {
@@ -159,7 +175,103 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
               {subtitle && <p>{subtitle}</p>}
             </div>
             <div className="admin-header-right">
-              <div className="admin-header-avatar">{initials}</div>
+              <div ref={avatarRef} style={{ position: 'relative' }}>
+                <div
+                  className="admin-header-avatar"
+                  onClick={toggleDropdown}
+                  style={{ cursor: 'pointer' }}
+                  title={user}
+                >
+                  {initials}
+                </div>
+                {profileOpen && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 8,
+                    background: '#1e2535', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    minWidth: 200, zIndex: 999, overflow: 'hidden',
+                  }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ fontWeight: 700, color: '#fff', fontSize: 14 }}>{user}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Administrator</div>
+                    </div>
+                    <div style={{ padding: '6px 0' }}>
+                      {[
+                        { label: 'My Profile', to: '/admin/profile' },
+                        { label: 'My Settings', to: '/admin/settings' },
+                        { label: 'Session Defaults', to: '/admin/session-defaults' },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          onClick={() => { setProfileOpen(false); navigate(item.to); }}
+                          style={{
+                            padding: '8px 16px', cursor: 'pointer', fontSize: 13,
+                            color: 'rgba(255,255,255,0.85)', transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '6px 0' }}>
+                      {[
+                        { label: 'Reload', onClick: () => window.location.reload() },
+                        { label: 'View Website', to: '/' },
+                        { label: 'Toggle Full Width', to: '#' },
+                        { label: 'Apps', to: '/admin/apps' },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          onClick={() => {
+                            setProfileOpen(false);
+                            if (item.onClick) item.onClick();
+                            else if (item.to && item.to !== '#') navigate(item.to);
+                          }}
+                          style={{
+                            padding: '8px 16px', cursor: 'pointer', fontSize: 13,
+                            color: 'rgba(255,255,255,0.85)', transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '6px 0' }}>
+                      <div
+                        onClick={() => { setProfileOpen(false); }}
+                        style={{
+                          padding: '8px 16px', cursor: 'pointer', fontSize: 13,
+                          color: 'rgba(255,255,255,0.85)', transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        Toggle Theme
+                      </div>
+                    </div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div
+                        onClick={() => { setProfileOpen(false); handleLogout(); }}
+                        style={{
+                          padding: '10px 16px', cursor: 'pointer', fontSize: 14,
+                          color: '#f87171', fontWeight: 600,
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.08)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        Logout
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 className="admin-mobile-toggle"
                 onClick={() => setSidebarOpen(o => !o)}

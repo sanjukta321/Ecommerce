@@ -17,19 +17,31 @@ interface Item {
   name: string;
   item_name: string;
   standard_rate: number;
-  actual_qty: number;
+  selling_price?: number;
   item_group: string;
 }
 
-interface Supplier {
-  name: string;
-  supplier_name: string;
-}
+
 
 interface DashboardData {
-  orders: SalesOrder[];
-  items: Item[];
-  suppliers: Supplier[];
+  total_orders: number;
+  total_products: number;
+  total_sellers: number;
+  total_customers: number;
+  total_revenue: number;
+  recent_orders: SalesOrder[];
+  top_products: Item[];
+}
+
+interface DiagnosticInfo {
+  user: string;
+  roles: string[];
+  has_item_read_permission: boolean;
+  total_items: number;
+  disabled_items: number;
+  website_items: number;
+  is_system_manager: boolean;
+  site: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -58,7 +70,7 @@ function formatDate(d: string) {
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
     credentials: 'include',
-    headers: { 'X-Frappe-CSRF-Token': 'fetch' },
+    headers: { 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} — ${url}`);
   return res.json() as Promise<T>;
@@ -80,6 +92,7 @@ function SkeletonStatCard() {
 
 export default function AdminDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [diag, setDiag] = useState<DiagnosticInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -88,24 +101,28 @@ export default function AdminDashboard() {
 
     async function load() {
       try {
-        const [ordersRes, itemsRes, suppliersRes] = await Promise.all([
+        const [summaryRes, diagRes, ordersRes, itemsRes] = await Promise.all([
+          fetchJson<{ message: DashboardData }>(
+            '/api/method/store_customizations.api.get_admin_summary'
+          ),
+          fetchJson<{ message: DiagnosticInfo }>(
+            '/api/method/store_customizations.api.check_products_setup'
+          ),
           fetchJson<{ data: SalesOrder[] }>(
-            '/api/resource/Sales%20Order?fields=["grand_total","status","transaction_date","customer_name","name"]&filters=[["docstatus","=","1"]]&limit=500'
+            '/api/resource/Sales%20Order?fields=["grand_total","status","transaction_date","customer_name","name"]&limit=10&order_by=creation desc'
           ),
           fetchJson<{ data: Item[] }>(
-            '/api/resource/Item?fields=["name","item_name","standard_rate","actual_qty","item_group"]&limit=500'
-          ),
-          fetchJson<{ data: Supplier[] }>(
-            '/api/resource/Supplier?fields=["name","supplier_name"]&limit=100'
+            '/api/resource/Item?fields=["name","item_name","item_group"]&limit=5'
           ),
         ]);
 
         if (!cancelled) {
           setData({
-            orders: ordersRes.data ?? [],
-            items: itemsRes.data ?? [],
-            suppliers: suppliersRes.data ?? [],
+            ...summaryRes.message,
+            recent_orders: ordersRes.data ?? [],
+            top_products: itemsRes.data ?? [],
           });
+          setDiag(diagRes.message);
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -124,31 +141,14 @@ export default function AdminDashboard() {
 
   // ── Derived stats ────────────────────────────────────────────────────────
 
-  const totalRevenue = data
-    ? data.orders.reduce((sum, o) => sum + (o.grand_total ?? 0), 0)
-    : 0;
-  const totalOrders = data?.orders.length ?? 0;
-  const totalProducts = data?.items.length ?? 0;
-  const totalSellers = data?.suppliers.length ?? 0;
-  const lowStockItems = data
-    ? data.items.filter((i) => (i.actual_qty ?? 0) < 10).length
-    : 0;
+  const totalRevenue = data?.total_revenue ?? 0;
+  const totalOrders = data?.total_orders ?? 0;
+  const totalProducts = data?.total_products ?? 0;
+  const totalSellers = data?.total_sellers ?? 0;
+  const totalCustomers = data?.total_customers ?? 0;
 
-  const recentOrders = data
-    ? [...data.orders]
-        .sort(
-          (a, b) =>
-            new Date(b.transaction_date).getTime() -
-            new Date(a.transaction_date).getTime()
-        )
-        .slice(0, 10)
-    : [];
-
-  const topProducts = data
-    ? [...data.items]
-        .sort((a, b) => (b.standard_rate ?? 0) - (a.standard_rate ?? 0))
-        .slice(0, 5)
-    : [];
+  const recentOrders = data?.recent_orders ?? [];
+  const topProducts = data?.top_products ?? [];
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -222,40 +222,76 @@ export default function AdminDashboard() {
               <div className="admin-stat-label">Total Products</div>
             </div>
 
-            {/* Total Sellers */}
+            {/* Total Customers */}
             <div className="admin-stat-card">
               <div className="admin-stat-icon purple">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                   <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                </svg>
+              </div>
+              <div className="admin-stat-value">{totalCustomers.toLocaleString()}</div>
+              <div className="admin-stat-label">Total Customers</div>
+            </div>
+
+            {/* Total Sellers */}
+            <div className="admin-stat-card">
+              <div className="admin-stat-icon purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M20 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
                 </svg>
               </div>
               <div className="admin-stat-value">{totalSellers.toLocaleString()}</div>
               <div className="admin-stat-label">Total Sellers</div>
             </div>
-
-            {/* Low Stock Items */}
-            <div className="admin-stat-card">
-              <div className="admin-stat-icon red">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-              </div>
-              <div className="admin-stat-value">{lowStockItems.toLocaleString()}</div>
-              <div className="admin-stat-label">Low Stock Items</div>
-              {lowStockItems > 0 && (
-                <div className="admin-stat-trend" style={{ color: '#ef4444' }}>
-                  Needs attention
-                </div>
-              )}
-            </div>
           </>
         )}
       </div>
+
+      {/* ── Diagnostic / System Status ── */}
+      {!loading && diag && (
+        <div className="admin-section" style={{ marginBottom: 22, border: '1px border #e2e8f0' }}>
+          <div className="admin-section-header">
+            <div>
+              <p className="admin-section-title">Product Check / System Status</p>
+              <p className="admin-section-subtitle">Live diagnostics for product visibility</p>
+            </div>
+            <div className={`admin-badge ${diag.has_item_read_permission ? 'active' : 'inactive'}`}>
+              {diag.has_item_read_permission ? 'API Connection Healthy' : 'API Access Restricted'}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+             <div className="diag-item">
+                <label style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Logged in as</label>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{diag.user}</span>
+             </div>
+             <div className="diag-item">
+                <label style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Total Products (DB)</label>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{diag.total_items}</span>
+             </div>
+             <div className="diag-item">
+                <label style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Published on Website</label>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{diag.website_items}</span>
+             </div>
+             <div className="diag-item">
+                <label style={{ fontSize: 11, color: '#94a3b8', display: 'block' }}>Disabled Total</label>
+                <span style={{ fontSize: 13, fontWeight: 600, color: diag.disabled_items > 0 ? '#ef4444' : 'inherit' }}>{diag.disabled_items}</span>
+             </div>
+          </div>
+          {diag.total_items === 0 && (
+            <div style={{ marginTop: 12, padding: 10, background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 6, fontSize: 12, color: '#92400e' }}>
+              <strong>Zero products found:</strong> Please add products in the backend or check if the site is correct.
+            </div>
+          )}
+          {!diag.has_item_read_permission && (
+            <div style={{ marginTop: 12, padding: 10, background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 6, fontSize: 12, color: '#991b1b' }}>
+              <strong>Permission denied:</strong> Your user account does not have read permissions for the "Item" doctype.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Two-column row ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 22, alignItems: 'start' }}>
@@ -404,7 +440,7 @@ export default function AdminDashboard() {
                       flexShrink: 0,
                     }}
                   >
-                    {inr(product.standard_rate ?? 0)}
+                    {inr(product.selling_price ?? product.standard_rate ?? 0)}
                   </div>
                 </div>
               ))}

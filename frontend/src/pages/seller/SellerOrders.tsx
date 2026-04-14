@@ -25,7 +25,7 @@ interface SalesOrder {
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': 'fetch' },
+    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
     ...options,
   });
   return res.json() as Promise<T>;

@@ -23,20 +23,15 @@ export interface Product {
   disabled?: number;
 }
 
-const PRODUCT_FIELDS = [
-  'name', 'item_name', 'item_group', 'standard_rate',
-  'actual_qty', 'website_image', 'thumbnail', 'description', 'disabled',
-].map(f => `"${f}"`).join(',');
+
 
 /** Fetch all products, optionally filtered by item_group. */
 export async function getProducts(itemGroup?: string, limit = 100): Promise<Product[]> {
-  const filters = itemGroup
-    ? `&filters=${encodeURIComponent(JSON.stringify([['item_group', '=', itemGroup]]))}`
-    : '';
-  const res = await api<{ data: Product[] }>(
-    `/api/resource/Item?fields=[${PRODUCT_FIELDS}]&limit=${limit}${filters}`
+  const groupParam = itemGroup ? `&item_group=${encodeURIComponent(itemGroup)}` : '';
+  const res = await api<{ message: Product[] }>(
+    `/api/method/store_customizations.api.get_all_products?limit=${limit}${groupParam}`
   );
-  return res.data ?? [];
+  return res.message ?? [];
 }
 
 /** Fetch a single product by item code. */

@@ -319,7 +319,8 @@
     z-index: 10000;
 }
 
-.account-dropdown-trigger:hover .account-dropdown {
+.account-dropdown-trigger:hover .account-dropdown,
+.account-dropdown.open {
     opacity: 1;
     visibility: visible;
     transform: translateY(0);

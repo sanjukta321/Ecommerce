@@ -2,17 +2,20 @@ import { useState, useEffect } from 'react';
 import { frappeApi } from '../api/frappe';
 import { allProducts, type Product } from '../data/allProducts';
 
+const PLACEHOLDER = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600';
+
 function mapToProduct(item: any): Product {
+  const rate = item.selling_price ?? item.standard_rate;
   return {
     id: item.name,
     name: item.item_name || item.name,
-    price: item.standard_rate
-      ? `₹${Number(item.standard_rate).toLocaleString('en-IN')}`
+    price: rate != null && Number(rate) > 0
+      ? `₹${Number(rate).toLocaleString('en-IN')}`
       : '₹0',
-    image: item.website_image || item.thumbnail
-      || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600',
+    image: item.image || item.website_image || item.thumbnail || PLACEHOLDER,
     category: item.item_group || 'General',
     rating: 4.5,
+    gender: item.gender || undefined,
   };
 }
 

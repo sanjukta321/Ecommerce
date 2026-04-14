@@ -8,6 +8,7 @@ interface Product {
   item_name: string;
   item_group: string;
   standard_rate: number;
+  selling_price?: number;
   website_image?: string;
   description?: string;
   is_sales_item?: number;
@@ -36,7 +37,7 @@ const EMPTY_FORM: FormState = {
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': 'fetch' },
+    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
     ...options,
   });
   const data = await res.json() as T;
@@ -57,7 +58,7 @@ export default function SellerProducts() {
     setLoading(true);
     try {
       const res = await apiFetch<{ data: Product[] }>(
-        '/api/resource/Item?limit=50&fields=["name","item_name","item_group","standard_rate","website_image","description","is_sales_item","actual_qty"]'
+        '/api/resource/Item?limit=50&fields=["name","item_name","item_group","website_image","description","is_sales_item"]'
       );
       setProducts(res.data || []);
     } catch {
@@ -79,7 +80,7 @@ export default function SellerProducts() {
     setForm({
       item_name: product.item_name || '',
       item_group: product.item_group || '',
-      standard_rate: String(product.standard_rate || ''),
+      standard_rate: String(product.selling_price ?? product.standard_rate ?? ''),
       description: product.description || '',
       website_image: product.website_image || '',
       is_sales_item: !!product.is_sales_item,
@@ -149,7 +150,7 @@ export default function SellerProducts() {
       <div className="seller-search-bar">
         <div className="seller-search-wrapper" style={{ flex: 1 }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
             className="seller-search-input"
@@ -160,7 +161,7 @@ export default function SellerProducts() {
           />
         </div>
         <button className="seller-btn" onClick={openAdd}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
           Add Product
         </button>
       </div>
@@ -180,7 +181,6 @@ export default function SellerProducts() {
                 <th>Name</th>
                 <th>Category</th>
                 <th>Price</th>
-                <th>Stock</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -189,17 +189,17 @@ export default function SellerProducts() {
               {loading ? (
                 [...Array(6)].map((_, i) => (
                   <tr key={i}>
-                    {[1,2,3,4,5,6,7].map(j => (
+                    {[1, 2, 3, 4, 5, 6].map(j => (
                       <td key={j}><div className="seller-skeleton seller-skeleton-row" /></td>
                     ))}
                   </tr>
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     <div className="seller-empty">
                       <div className="seller-empty-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></svg>
                       </div>
                       <h3>No products found</h3>
                       <p>Add your first product to get started</p>
@@ -214,14 +214,13 @@ export default function SellerProducts() {
                         <img src={product.website_image} alt={product.item_name} className="product-thumb" />
                       ) : (
                         <div className="product-thumb-placeholder">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></svg>
                         </div>
                       )}
                     </td>
                     <td style={{ fontWeight: 600, color: '#1a1a2e' }}>{product.item_name}</td>
                     <td style={{ color: '#6b7280' }}>{product.item_group}</td>
-                    <td style={{ fontWeight: 700 }}>₹{(product.standard_rate || 0).toLocaleString('en-IN')}</td>
-                    <td>{product.actual_qty ?? '—'}</td>
+                    <td style={{ fontWeight: 700 }}>₹{(product.selling_price ?? product.standard_rate ?? 0).toLocaleString('en-IN')}</td>
                     <td>
                       <span className={`seller-badge ${product.is_sales_item ? 'published' : 'draft'}`}>
                         {product.is_sales_item ? 'Published' : 'Draft'}
@@ -349,6 +348,7 @@ export default function SellerProducts() {
               <p style={{ color: '#3d4a5c', marginTop: 0 }}>
                 Are you sure you want to delete <strong>{deleteConfirm}</strong>? This action cannot be undone.
               </p>
+
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
                 <button className="seller-btn-outline" onClick={() => setDeleteConfirm(null)}>Cancel</button>
                 <button

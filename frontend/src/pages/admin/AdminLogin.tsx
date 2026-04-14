@@ -23,7 +23,7 @@ export default function AdminLogin() {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-Frappe-CSRF-Token': 'fetch',
+          'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''),
         },
         body: JSON.stringify({ usr, pwd }),
       });
@@ -46,7 +46,7 @@ export default function AdminLogin() {
         `${BASE}/api/method/frappe.auth.get_logged_user`,
         {
           credentials: 'include',
-          headers: { 'X-Frappe-CSRF-Token': 'fetch' },
+          headers: { 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
         }
       );
       const userData = (await userRes.json()) as { message: string };
@@ -57,7 +57,7 @@ export default function AdminLogin() {
         `${BASE}/api/resource/Has Role?filters=[["parent","=","${encodeURIComponent(loggedUser)}"],["role","in","Administrator,System Manager"]]&fields=["role"]&limit=5`,
         {
           credentials: 'include',
-          headers: { 'X-Frappe-CSRF-Token': 'fetch' },
+          headers: { 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
         }
       );
       const roleData = (await roleRes.json()) as {

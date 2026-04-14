@@ -53,6 +53,66 @@ def get_current_user_roles():
     return {"roles": roles, "user": user}
 
 
+@frappe.whitelist()
+def get_current_user_profile():
+    """
+    Return the logged-in user's own profile fields.
+    Safe alternative to /api/resource/User which Frappe blocks for non-admins.
+    """
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    doc = frappe.db.get_value(
+        "User", user,
+        ["first_name", "last_name", "full_name", "email", "mobile_no", "gender"],
+        as_dict=True,
+    ) or {}
+    return doc
+
+
+@frappe.whitelist()
+def update_current_user_profile(first_name=None, last_name=None, gender=None, mobile_no=None):
+    """
+    Update allowed fields on the logged-in user's own profile.
+    """
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    doc = frappe.get_doc("User", user)
+    if first_name is not None:
+        doc.first_name = first_name
+    if last_name is not None:
+        doc.last_name = last_name
+    if gender is not None:
+        doc.gender = gender
+    if mobile_no is not None:
+        doc.mobile_no = mobile_no
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {
+        "first_name": doc.first_name,
+        "last_name": doc.last_name,
+        "full_name": doc.full_name,
+        "email": doc.email,
+        "mobile_no": doc.mobile_no,
+        "gender": doc.gender,
+    }
+
+
+@frappe.whitelist()
+def get_csrf_token():
+    """
+    Return the current session CSRF token.
+    Used by the React SPA (which has no Frappe boot context) to obtain the
+    real token so that POST/PUT/DELETE requests can pass CSRF validation.
+    This endpoint is a GET — no CSRF token is required to call it.
+    """
+    return frappe.session.data.csrf_token
+
+
 # ─────────────────────────────────────────────
 #  CUSTOMER  (registration)
 # ─────────────────────────────────────────────
@@ -60,6 +120,9 @@ def get_current_user_roles():
 @frappe.whitelist(allow_guest=True)
 def send_registration_otp(contact):
     """Send a 6-digit OTP to email or mobile for new customer registration."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
     contact = (contact or "").strip()
     if not contact:
         frappe.throw("Email or mobile number is required.")
@@ -95,6 +158,9 @@ def register_customer(contact, otp, full_name, password, email=None, phone=None)
     Register a new customer account.
     Creates a Frappe User + Customer + Contact linked together.
     """
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
     contact = (contact or "").strip()
     if not all([contact, otp, full_name, password]):
         frappe.throw("All fields are required.")
@@ -178,6 +244,72 @@ def register_customer(contact, otp, full_name, password, email=None, phone=None)
 #  Standard CRUD uses /api/resource/Item directly.
 # ─────────────────────────────────────────────
 
+@frappe.whitelist(allow_guest=True)
+def get_all_products(item_group=None, limit=100):
+    """Return all products, accessible by guest, optionally filtered by item_group."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    filters = {"disabled": 0, "has_variants": 0}
+    if item_group:
+        filters["item_group"] = item_group
+
+    items = frappe.get_all(
+        "Item",
+        filters=filters,
+        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled"],
+        limit=limit,
+    )
+
+    if not items:
+        return items
+
+    # Enrich with selling price from Item Price (e.g. Standard Selling price list)
+    item_codes = [i["name"] for i in items]
+    item_prices = frappe.get_all(
+        "Item Price",
+        filters={"item_code": ["in", item_codes], "selling": 1},
+        fields=["item_code", "price_list_rate"],
+        order_by="modified desc",
+    )
+
+    # Keep only the most-recently-modified price per item
+    price_map = {}
+    for ip in item_prices:
+        if ip["item_code"] not in price_map:
+            price_map[ip["item_code"]] = ip["price_list_rate"]
+
+    for item in items:
+        item["selling_price"] = price_map.get(item["name"], item.get("standard_rate") or 0)
+
+    # Assign gender for Fashion items so the frontend can filter Men / Women / Kids tabs
+    MEN_CODES   = {'f1', 'f2', 'f3', 'f4', 'n1', 'n2'}
+    WOMEN_CODES = {'f5', 'f6', 's1', 's2', 'wb1', 'wb2', 'wc1', 'wc3',
+                   'wk1', 'wk2', 'wk3', 'wk4', 'Saree'}
+    KIDS_CODES  = {'kd1', 'kd2', 'kd3', 'kd4', 'kd5', 'kd6', 'kd7'}
+
+    MEN_KW   = ['mens', "men's", 'shirt', 'blazer', 'biker jacket', 'hoodie',
+                'linen blend', 'denim', 'trouser', 'chino']
+    WOMEN_KW = ['womens', "women's", 'ladies', 'saree', 'sari', 'kurti', 'kurta',
+                'anarkali', 'palazzo', 'georgette', 'gown', 'stiletto', 'heels',
+                'handbag', 'cosmetic', 'makeup', 'lipstick', 'foundation']
+    KIDS_KW  = ['kids', 'children', 'child', 'baby', 'junior', 'boys', 'girls',
+                'princess frock', 'school shoes']
+
+    for item in items:
+        code       = item["name"]
+        name_lower = (item.get("item_name") or "").lower()
+        if code in MEN_CODES or any(kw in name_lower for kw in MEN_KW):
+            item["gender"] = "Men"
+        elif code in WOMEN_CODES or any(kw in name_lower for kw in WOMEN_KW):
+            item["gender"] = "Women"
+        elif code in KIDS_CODES or any(kw in name_lower for kw in KIDS_KW):
+            item["gender"] = "Kids"
+        else:
+            item["gender"] = None
+
+    return items
+
 # Example — uncomment and customise when needed:
 #
 # @frappe.whitelist(allow_guest=True)
@@ -242,17 +374,578 @@ def register_customer(contact, otp, full_name, password, email=None, phone=None)
 
 # Example — uncomment and customise when needed:
 #
-# @frappe.whitelist()
-# def get_admin_summary():
-#     """Dashboard summary for the admin panel."""
-#     if "System Manager" not in frappe.get_roles():
-#         frappe.throw("Not permitted", frappe.PermissionError)
-#     return {
-#         "total_orders":    frappe.db.count("Sales Order"),
-#         "total_products":  frappe.db.count("Item"),
-#         "total_sellers":   frappe.db.count("Supplier"),
-#         "total_customers": frappe.db.count("Customer"),
-#         "total_revenue":   frappe.db.sql(
-#             "SELECT IFNULL(SUM(grand_total),0) FROM `tabSales Order` WHERE docstatus=1"
-#         )[0][0],
-#     }
+@frappe.whitelist()
+def get_admin_products(limit=200):
+    """Return all items (including disabled) for the admin products page."""
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    items = frappe.get_all(
+        "Item",
+        filters={"has_variants": 0},
+        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled"],
+        order_by="creation desc",
+        limit=int(limit),
+    )
+
+    if not items:
+        return items
+
+    # Enrich with selling price from Item Price
+    item_codes = [i["name"] for i in items]
+    item_prices = frappe.get_all(
+        "Item Price",
+        filters={"item_code": ["in", item_codes], "selling": 1},
+        fields=["item_code", "price_list_rate"],
+        order_by="modified desc",
+    )
+    price_map = {}
+    for ip in item_prices:
+        if ip["item_code"] not in price_map:
+            price_map[ip["item_code"]] = ip["price_list_rate"]
+
+    for item in items:
+        item["selling_price"] = price_map.get(item["name"], item.get("standard_rate") or 0)
+
+    # Enrich with stock quantity from Bin (sum across all warehouses)
+    bins = frappe.get_all(
+        "Bin",
+        filters={"item_code": ["in", item_codes]},
+        fields=["item_code", "actual_qty"],
+    )
+    stock_map = {}
+    for b in bins:
+        stock_map[b["item_code"]] = stock_map.get(b["item_code"], 0) + (b["actual_qty"] or 0)
+
+    for item in items:
+        item["actual_qty"] = stock_map.get(item["name"], 0)
+
+    return items
+
+
+@frappe.whitelist()
+def update_item_stock(item_code, qty, warehouse=None):
+    """Create a Stock Reconciliation to set item stock to the given quantity."""
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
+    _reconcile_stock(item_code, float(qty), warehouse)
+    return {"qty": float(qty)}
+
+
+def _resolve_warehouse(warehouse=None):
+    """Return a usable warehouse name, or throw if none is configured."""
+    if warehouse:
+        return warehouse
+    wh = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+    if not wh:
+        rows = frappe.get_all("Warehouse", filters={"is_group": 0, "disabled": 0}, fields=["name"], limit=1)
+        wh = rows[0]["name"] if rows else None
+    if not wh:
+        frappe.throw("No warehouse configured. Set a Default Warehouse in Stock Settings.")
+    return wh
+
+
+def _reconcile_stock(item_code, qty, warehouse=None, valuation_rate=None):
+    """Submit a Stock Reconciliation for the item.
+
+    valuation_rate is required by ERPNext when the item has no prior stock
+    ledger entries (i.e. opening stock for a brand-new item).  We fall back
+    to the item's standard_rate so the caller doesn't always have to supply it.
+    """
+    warehouse = _resolve_warehouse(warehouse)
+
+    # Resolve valuation rate: use the existing bin rate if available,
+    # otherwise fall back to the supplied rate, then to standard_rate.
+    if valuation_rate is None:
+        existing = frappe.db.get_value(
+            "Bin",
+            {"item_code": item_code, "warehouse": warehouse},
+            "valuation_rate",
+        )
+        valuation_rate = float(existing or 0) or float(
+            frappe.db.get_value("Item", item_code, "standard_rate") or 0
+        )
+
+    sr = frappe.new_doc("Stock Reconciliation")
+    sr.purpose = "Stock Reconciliation"
+    sr.append("items", {
+        "item_code": item_code,
+        "warehouse": warehouse,
+        "qty": qty,
+        "valuation_rate": valuation_rate,
+    })
+    sr.insert(ignore_permissions=True)
+    sr.submit()
+
+
+def _current_stock(item_code):
+    """Return summed actual_qty across all warehouses."""
+    result = frappe.db.sql(
+        "SELECT COALESCE(SUM(actual_qty), 0) FROM `tabBin` WHERE item_code = %s",
+        item_code, as_list=True,
+    )
+    return float(result[0][0]) if result else 0.0
+
+
+@frappe.whitelist()
+def save_admin_product(
+    item_name, item_group, price,
+    stock_qty=0, description="", image="", published=1,
+    item_code=None,
+):
+    """
+    Create or update a product with its price and stock in one atomic call.
+
+    - Creates/updates the Frappe Item (is_stock_item=1 enforced)
+    - Creates/updates the Item Price record on the Standard Selling price list
+    - Creates a Stock Reconciliation when the stock quantity has changed
+    """
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    price     = float(price)
+    stock_qty = float(stock_qty)
+    published = int(published)
+
+    # ── 1. Item ──────────────────────────────────────────────────────────────
+    if item_code:
+        item = frappe.get_doc("Item", item_code)
+        old_stock = _current_stock(item_code)
+    else:
+        item = frappe.new_doc("Item")
+        old_stock = 0.0
+        # item_code is the naming field (autoname = "field:item_code").
+        # Default to item_name; append a counter if that code is already taken.
+        base_code = item_name.strip()[:140]
+        code = base_code
+        counter = 1
+        while frappe.db.exists("Item", code):
+            code = f"{base_code[:136]}-{counter}"
+            counter += 1
+        item.item_code = code
+
+    item.item_name    = item_name.strip()
+    item.item_group   = item_group
+    item.standard_rate = price
+    item.description  = description or ""
+    item.image        = image or ""
+    item.disabled     = 0 if published else 1
+    item.is_stock_item = 1
+    if not item.stock_uom:
+        item.stock_uom = "Nos"
+
+    if item_code:
+        item.save(ignore_permissions=True)
+    else:
+        item.insert(ignore_permissions=True)
+
+    item_code = item.name
+
+    # ── 2. Item Price ─────────────────────────────────────────────────────────
+    price_list = (
+        frappe.db.get_single_value("Selling Settings", "selling_price_list")
+        or "Standard Selling"
+    )
+    existing_ip = frappe.db.get_value(
+        "Item Price",
+        {"item_code": item_code, "selling": 1, "price_list": price_list},
+        "name",
+    )
+    if existing_ip:
+        frappe.db.set_value("Item Price", existing_ip, "price_list_rate", price)
+    else:
+        ip = frappe.new_doc("Item Price")
+        ip.item_code       = item_code
+        ip.price_list      = price_list
+        ip.selling         = 1
+        ip.price_list_rate = price
+        ip.insert(ignore_permissions=True)
+
+    # ── 3. Stock Reconciliation (only when qty changed) ───────────────────────
+    if stock_qty != old_stock:
+        _reconcile_stock(item_code, stock_qty, valuation_rate=price)
+
+    frappe.db.commit()
+
+    return {
+        "item_code":    item_code,
+        "item_name":    item.item_name,
+        "selling_price": price,
+        "actual_qty":   stock_qty,
+    }
+
+
+# ─────────────────────────────────────────────
+#  CHECKOUT
+# ─────────────────────────────────────────────
+
+@frappe.whitelist(allow_guest=True)
+def place_order(cart_items, address, payment_method, mobile=None):
+    """
+    Full e-commerce checkout flow (guest-friendly).
+    Steps: resolve/create Customer → Sales Order → Sales Invoice → Payment Entry
+    """
+    import json
+
+    # Frappe's submit() and certain db helpers re-check the current session user
+    # internally. Guest users raise AuthenticationError even with ignore_permissions.
+    # Elevating to Administrator here is the standard Frappe pattern for
+    # allow_guest=True endpoints that must create/submit documents.
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    if isinstance(cart_items, str):
+        cart_items = json.loads(cart_items)
+    if isinstance(address, str):
+        address = json.loads(address)
+
+    if not cart_items:
+        frappe.throw("Cart is empty")
+
+    # 1. Resolve Customer
+    customer = _checkout_resolve_customer(address, mobile)
+
+    # 2. Sales Order (submitted)
+    so = _checkout_create_sales_order(customer, cart_items)
+
+    # 3. Sales Invoice (submitted)
+    si = _checkout_create_sales_invoice(so, customer)
+
+    # 4. Payment Entry — only for online payments; soft-fail so order never blocks
+    pe_name = None
+    if payment_method != "cod":
+        try:
+            pe_name = _checkout_create_payment_entry(si, payment_method)
+        except Exception as exc:
+            frappe.log_error(str(exc), "Checkout: Payment Entry")
+
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "sales_order":   so.name,
+        "sales_invoice": si.name,
+        "payment_entry": pe_name,
+        "order_total":   si.grand_total,
+    }
+
+
+def _checkout_resolve_customer(address, mobile):
+    """Return existing customer for logged-in user, or create a new one."""
+    # Logged-in Frappe user → look up their linked Customer
+    user = frappe.session.user
+    if user and user not in ("Guest", "Administrator"):
+        cust = frappe.db.get_value("Customer", {"email_id": user}, "name")
+        if cust:
+            return cust
+
+    # Returning guest? Find by mobile
+    if mobile:
+        cust = frappe.db.get_value("Customer", {"mobile_no": mobile}, "name")
+        if cust:
+            return cust
+
+    # New customer — create record from checkout form
+    full_name = (address.get("fullName") or "").strip() or "Guest Customer"
+
+    # Safe fallbacks for customer_group and territory
+    try:
+        default_group = frappe.db.get_single_value("Selling Settings", "customer_group") or "Individual"
+    except Exception:
+        default_group = "Individual"
+    try:
+        default_territory = frappe.db.get_single_value("Selling Settings", "territory") or "All Territories"
+    except Exception:
+        default_territory = "All Territories"
+
+    # Ensure the customer_group exists
+    if not frappe.db.exists("Customer Group", default_group):
+        default_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name") or "All Customer Groups"
+
+    # Ensure the territory exists
+    if not frappe.db.exists("Territory", default_territory):
+        default_territory = frappe.db.get_value("Territory", {}, "name") or "All Territories"
+
+    cust_doc = frappe.new_doc("Customer")
+    cust_doc.customer_name = full_name
+    cust_doc.customer_type = "Individual"
+    cust_doc.customer_group = default_group
+    cust_doc.territory = default_territory
+    if mobile:
+        cust_doc.mobile_no = mobile
+    cust_doc.insert(ignore_permissions=True)
+    return cust_doc.name
+
+
+def _checkout_create_sales_order(customer, cart_items):
+    """Create and submit a Sales Order from cart items."""
+    delivery_date = frappe.utils.add_days(frappe.utils.today(), 5)
+
+    so = frappe.new_doc("Sales Order")
+    so.customer = customer
+    so.transaction_date = frappe.utils.today()
+    so.delivery_date = delivery_date
+    so.order_type = "Sales"
+    so.ignore_pricing_rule = 1
+
+    for item in cart_items:
+        item_code = item.get("id") or item.get("item_code")
+        if not frappe.db.exists("Item", item_code):
+            frappe.throw(f"Item not found: {item_code}")
+        so.append("items", {
+            "item_code":    item_code,
+            "qty":          float(item.get("quantity", 1)),
+            "rate":         float(item.get("price", 0)),
+            "delivery_date": delivery_date,
+        })
+
+    so.insert(ignore_permissions=True)
+    so.flags.ignore_permissions = True
+    so.submit()
+    return so
+
+
+def _checkout_create_sales_invoice(so, customer):
+    """Create and submit a Sales Invoice linked to the Sales Order."""
+    try:
+        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+        si = make_sales_invoice(so.name)
+    except Exception:
+        # Fallback: build invoice manually when ERPNext helper unavailable
+        si = frappe.new_doc("Sales Invoice")
+        si.customer = customer
+        si.posting_date = frappe.utils.today()
+        for so_item in so.items:
+            si.append("items", {
+                "item_code":  so_item.item_code,
+                "qty":        so_item.qty,
+                "rate":       so_item.rate,
+                "sales_order": so.name,
+            })
+
+    si.flags.ignore_permissions = True
+    si.insert(ignore_permissions=True)
+    si.flags.ignore_permissions = True
+    si.submit()
+    return si
+
+
+def _checkout_create_payment_entry(si, payment_method):
+    """Create and submit a Payment Entry for the Sales Invoice."""
+    try:
+        from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+        pe = get_payment_entry("Sales Invoice", si.name)
+    except Exception:
+        # Minimal manual payment entry
+        pe = frappe.new_doc("Payment Entry")
+        pe.payment_type = "Receive"
+        pe.party_type = "Customer"
+        pe.party = si.customer
+        pe.paid_amount = si.grand_total
+        pe.received_amount = si.grand_total
+
+        receivable = frappe.db.get_value(
+            "Account", {"account_type": "Receivable", "is_group": 0}, "name"
+        )
+        cash = frappe.db.get_value(
+            "Account", {"account_type": "Cash", "is_group": 0}, "name"
+        )
+        if not receivable or not cash:
+            frappe.throw("Chart of accounts not configured for payment entry")
+
+        pe.paid_from = receivable
+        pe.paid_to = cash
+        pe.append("references", {
+            "reference_doctype": "Sales Invoice",
+            "reference_name":    si.name,
+            "allocated_amount":  si.grand_total,
+        })
+
+    mode_labels = {"upi": "Cash", "card": "Cash", "cod": "Cash"}
+    pe.mode_of_payment = mode_labels.get(payment_method, "Cash")
+    pe.reference_no = f"TXN-{frappe.utils.random_string(8).upper()}"
+    pe.reference_date = frappe.utils.today()
+
+    pe.flags.ignore_permissions = True
+    pe.insert(ignore_permissions=True)
+    pe.flags.ignore_permissions = True
+    pe.submit()
+    return pe.name
+
+
+@frappe.whitelist()
+def get_admin_summary():
+    """Dashboard summary for the admin panel."""
+    # Strict role check
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    return {
+        "total_orders":    frappe.db.count("Sales Order"),
+        "total_products":  frappe.db.count("Item"),
+        "total_sellers":   frappe.db.count("Supplier"),
+        "total_customers": frappe.db.count("Customer"),
+        "total_revenue":   frappe.db.sql(
+            "SELECT IFNULL(SUM(grand_total),0) FROM `tabSales Order` WHERE docstatus=1"
+        )[0][0],
+    }
+
+
+@frappe.whitelist()
+def seed_all_missing_items():
+    """Create all missing items for every frontend subcategory."""
+    NEW_ITEMS = [
+        # ── Kids Fashion ──────────────────────────────────────────────
+        {'name': 'kd1', 'item_name': 'Kids Cotton Casual T-Shirt Set',   'item_group': 'Fashion', 'standard_rate': 1299,  'image': 'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'kd2', 'item_name': 'Kids Denim Shorts & Top Set',      'item_group': 'Fashion', 'standard_rate': 1599,  'image': 'https://images.unsplash.com/photo-1518831959646-742c3a14ebf7?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'kd3', 'item_name': 'Kids Ethnic Party Wear Kurta',     'item_group': 'Fashion', 'standard_rate': 2499,  'image': 'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'kd4', 'item_name': 'Kids Sports Running Shoes',        'item_group': 'Fashion', 'standard_rate': 1199,  'image': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'kd5', 'item_name': 'Kids Canvas School Shoes',         'item_group': 'Fashion', 'standard_rate': 899,   'image': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'kd6', 'item_name': 'Kids Winter Jacket & Hoodie',      'item_group': 'Fashion', 'standard_rate': 2999,  'image': 'https://images.unsplash.com/photo-1556821840-3a63f15732ce?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'kd7', 'item_name': 'Kids Princess Frock Dress',        'item_group': 'Fashion', 'standard_rate': 1899,  'image': 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=600'},
+        # ── Women Kurti ───────────────────────────────────────────────
+        {'name': 'wk1', 'item_name': 'Cotton Anarkali Kurti Set',        'item_group': 'Fashion', 'standard_rate': 1499,  'image': 'https://images.unsplash.com/photo-1610189019599-2b8f8b03c1ac?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'wk2', 'item_name': 'Silk Embroidered Kurti Palazzo',   'item_group': 'Fashion', 'standard_rate': 3499,  'image': 'https://images.unsplash.com/photo-1610189019599-2b8f8b03c1ac?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'wk3', 'item_name': 'Printed Casual Daily Kurti',       'item_group': 'Fashion', 'standard_rate': 999,   'image': 'https://images.unsplash.com/photo-1610189019599-2b8f8b03c1ac?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'wk4', 'item_name': 'Designer Georgette Kurti',         'item_group': 'Fashion', 'standard_rate': 2299,  'image': 'https://images.unsplash.com/photo-1610189019599-2b8f8b03c1ac?auto=format&fit=crop&q=80&w=600'},
+        # ── Sports – Football ─────────────────────────────────────────
+        {'name': 'sp6', 'item_name': 'Nike Premier League Football',     'item_group': 'Sports',  'standard_rate': 2499,  'image': 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'sp7', 'item_name': 'Adidas Football Training Cleats',  'item_group': 'Sports',  'standard_rate': 4999,  'image': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600'},
+        # ── Books – Academic ──────────────────────────────────────────
+        {'name': 'ba1', 'item_name': 'Advanced Mathematics Textbook',    'item_group': 'Books',   'standard_rate': 799,   'image': 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'ba2', 'item_name': 'Physics Engineering Study Guide',  'item_group': 'Books',   'standard_rate': 849,   'image': 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'ba3', 'item_name': 'NCERT Complete Science Academic',  'item_group': 'Books',   'standard_rate': 599,   'image': 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=600'},
+        # ── Accessories – more Jewellery, Watch, Sunglasses ──────────
+        {'name': 'ac6', 'item_name': 'Diamond Studded Gold Bracelet',    'item_group': 'Accessories', 'standard_rate': 4999, 'image': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'ac7', 'item_name': 'Ray-Ban Wayfarer Sunglasses',      'item_group': 'Accessories', 'standard_rate': 7999, 'image': 'https://images.unsplash.com/photo-1577803645773-f96470509666?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'ac8', 'item_name': 'Titan Fastrack Analog Watch',      'item_group': 'Accessories', 'standard_rate': 3499, 'image': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600'},
+        {'name': 'ac9', 'item_name': 'Gold Pearl Necklace Set',          'item_group': 'Accessories', 'standard_rate': 8999, 'image': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&q=80&w=600'},
+    ]
+
+    created, skipped = [], []
+    for data in NEW_ITEMS:
+        if frappe.db.exists('Item', data['name']):
+            skipped.append(data['name'])
+            continue
+        item = frappe.new_doc('Item')
+        item.name         = data['name']
+        item.item_code    = data['name']
+        item.item_name    = data['item_name']
+        item.item_group   = data['item_group']
+        item.standard_rate = data['standard_rate']
+        item.image        = data['image']
+        item.stock_uom    = 'Nos'
+        item.is_stock_item = 0
+        item.disabled     = 0
+        item.insert(ignore_permissions=True)
+        created.append(data['name'])
+
+    # Also create Item Price records for each new item
+    for data in NEW_ITEMS:
+        if data['name'] not in created:
+            continue
+        if not frappe.db.exists('Item Price', {'item_code': data['name'], 'selling': 1}):
+            ip = frappe.new_doc('Item Price')
+            ip.item_code       = data['name']
+            ip.price_list      = 'Standard Selling'
+            ip.selling         = 1
+            ip.price_list_rate = data['standard_rate']
+            ip.insert(ignore_permissions=True)
+
+    frappe.db.commit()
+    return {'created': len(created), 'skipped': len(skipped), 'items': created}
+
+
+@frappe.whitelist()
+def seed_item_images():
+    """One-time script: assign stock Unsplash images to all items that lack one."""
+    IMAGE_MAP = {
+        # Accessories
+        'a1': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+        'a2': 'https://images.unsplash.com/photo-1577803645773-f96470509666?auto=format&fit=crop&q=80&w=600',
+        'a3': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&q=80&w=600',
+        'a4': 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&q=80&w=600',
+        'a5': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&q=80&w=600',
+        # Books
+        'b1': 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=600',
+        'b2': 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=600',
+        'b3': 'https://images.unsplash.com/photo-1466637574441-749b8f19452f?auto=format&fit=crop&q=80&w=600',
+        'b4': 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=600',
+        'b5': 'https://images.unsplash.com/photo-1486325212027-8081e485255e?auto=format&fit=crop&q=80&w=600',
+        # Electronics
+        'e1': 'https://images.unsplash.com/photo-1678685888221-cda773a3dcdb?auto=format&fit=crop&q=80&w=600',
+        'e2': 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&q=80&w=600',
+        'e3': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600',
+        'e4': 'https://images.unsplash.com/photo-1434493789847-2f02dc6ca35d?auto=format&fit=crop&q=80&w=600',
+        'e5': 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&q=80&w=600',
+        'e6': 'https://images.unsplash.com/photo-1593784991095-a205069470b6?auto=format&fit=crop&q=80&w=600',
+        'e7': 'https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&q=80&w=600',
+        'e8': 'https://images.unsplash.com/photo-1584568694244-14fbdf83bd30?auto=format&fit=crop&q=80&w=600',
+        'n5': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+        'Watch': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+        # Fashion
+        'f1': 'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&q=80&w=600',
+        'f2': 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&q=80&w=600',
+        'f3': 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&q=80&w=600',
+        'f4': 'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&q=80&w=600',
+        'f5': 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&q=80&w=600',
+        'f6': 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&q=80&w=600',
+        'n1': 'https://images.unsplash.com/photo-1556821840-3a63f15732ce?auto=format&fit=crop&q=80&w=600',
+        'n2': 'https://images.unsplash.com/photo-1594938298603-c8148c4b4ef8?auto=format&fit=crop&q=80&w=600',
+        's1': 'https://images.unsplash.com/photo-1610189019599-2b8f8b03c1ac?auto=format&fit=crop&q=80&w=600',
+        's2': 'https://images.unsplash.com/photo-1610189019599-2b8f8b03c1ac?auto=format&fit=crop&q=80&w=600',
+        'wb1': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&q=80&w=600',
+        'wb2': 'https://images.unsplash.com/photo-1590739293931-a7b40c581513?auto=format&fit=crop&q=80&w=600',
+        'wc1': 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&q=80&w=600',
+        'wc3': 'https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&q=80&w=600',
+        # Furniture
+        'fn1': 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=600',
+        'fn2': 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&q=80&w=600',
+        'fn3': 'https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?auto=format&fit=crop&q=80&w=600',
+        'fn4': 'https://images.unsplash.com/photo-1580480055273-228ff5388ef8?auto=format&fit=crop&q=80&w=600',
+        'fn5': 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&q=80&w=600',
+        # Products
+        'Laptop': 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&q=80&w=600',
+        # Sports
+        'sp1': 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&q=80&w=600',
+        'sp2': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=600',
+        'sp3': 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=600',
+        'sp4': 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&q=80&w=600',
+        'sp5': 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&q=80&w=600',
+        # Saree
+        'Saree': 'https://images.unsplash.com/photo-1610189019599-2b8f8b03c1ac?auto=format&fit=crop&q=80&w=600',
+    }
+    updated = []
+    for item_code, url in IMAGE_MAP.items():
+        if frappe.db.exists('Item', item_code):
+            frappe.db.set_value('Item', item_code, 'image', url)
+            updated.append(item_code)
+    frappe.db.commit()
+    return {'updated': len(updated), 'items': updated}
+
+
+@frappe.whitelist()
+def check_products_setup():
+    """Diagnostic endpoint to check why products might not be showing."""
+    user = frappe.session.user
+    roles = frappe.get_roles(user)
+    
+    # Check Item permissions for current user
+    from frappe.permissions import has_permission
+    has_read = has_permission("Item", "read")
+    
+    # Check total counts
+    total_items = frappe.db.count("Item")
+    disabled_items = frappe.db.count("Item", {"disabled": 1})
+    active_items = frappe.db.count("Item", {"disabled": 0})
+
+    return {
+        "user": user,
+        "roles": roles,
+        "has_item_read_permission": has_read,
+        "total_items": total_items,
+        "disabled_items": disabled_items,
+        "active_items": active_items,
+        "is_system_manager": "System Manager" in roles,
+        "site": frappe.local.site
+    }

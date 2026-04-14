@@ -1,5 +1,5 @@
-import { type ReactNode, useState } from 'react';
-import { NavLink, useNavigate, Navigate } from 'react-router-dom';
+import { type ReactNode, useState, useEffect, useRef } from 'react';
+import { NavLink, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import '../../styles/Seller.css';
 
 interface SellerLayoutProps {
@@ -10,7 +10,28 @@ interface SellerLayoutProps {
 
 export default function SellerLayout({ children, title, subtitle }: SellerLayoutProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const avatarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Reset nav scroll when path changes to ensure top items are visible
+  useEffect(() => {
+    if (navRef.current) {
+      navRef.current.scrollTop = 0;
+    }
+  }, [location.pathname]);
 
   const session = localStorage.getItem('seller_session');
   if (!session) {
@@ -28,6 +49,10 @@ export default function SellerLayout({ children, title, subtitle }: SellerLayout
   };
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  const toggleDropdown = () => {
+    setProfileOpen(o => !o);
+  };
 
   return (
     <>
@@ -53,7 +78,7 @@ export default function SellerLayout({ children, title, subtitle }: SellerLayout
             </div>
           </div>
 
-          <nav className="seller-nav">
+          <nav className="seller-nav" ref={navRef}>
             <div className="seller-nav-section">Main Menu</div>
 
             <NavLink
@@ -212,9 +237,102 @@ export default function SellerLayout({ children, title, subtitle }: SellerLayout
               {subtitle && <p>{subtitle}</p>}
             </div>
             <div className="seller-header-right">
-              <div className="seller-header-user">
-                <div className="seller-header-avatar">{initials}</div>
-                <span style={{ display: 'none' }}>{user}</span>
+              <div className="seller-header-user" ref={avatarRef} style={{ position: 'relative' }}>
+                <div
+                  className="seller-header-avatar"
+                  onClick={toggleDropdown}
+                  style={{ cursor: 'pointer' }}
+                  title={user}
+                >
+                  {initials}
+                </div>
+                {profileOpen && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 8,
+                    background: '#1e2535', border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    minWidth: 200, zIndex: 999, overflow: 'hidden',
+                  }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ fontWeight: 700, color: '#fff', fontSize: 14 }}>{user}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Seller Account</div>
+                    </div>
+                    <div style={{ padding: '6px 0' }}>
+                      {[
+                        { label: 'My Profile', to: '/seller/profile' },
+                        { label: 'My Settings', to: '/seller/settings' },
+                        { label: 'Session Defaults', to: '/seller/session-defaults' },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          onClick={() => { setProfileOpen(false); navigate(item.to); }}
+                          style={{
+                            padding: '8px 16px', cursor: 'pointer', fontSize: 13,
+                            color: 'rgba(255,255,255,0.85)', transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '6px 0' }}>
+                      {[
+                        { label: 'Reload', onClick: () => window.location.reload() },
+                        { label: 'View Website', to: '/' },
+                        { label: 'Toggle Full Width', to: '#' },
+                        { label: 'Apps', to: '/seller/apps' },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          onClick={() => {
+                            setProfileOpen(false);
+                            if (item.onClick) item.onClick();
+                            else if (item.to && item.to !== '#') navigate(item.to);
+                          }}
+                          style={{
+                            padding: '8px 16px', cursor: 'pointer', fontSize: 13,
+                            color: 'rgba(255,255,255,0.85)', transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '6px 0' }}>
+                      <div
+                        onClick={() => { setProfileOpen(false); }}
+                        style={{
+                          padding: '8px 16px', cursor: 'pointer', fontSize: 13,
+                          color: 'rgba(255,255,255,0.85)', transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        Toggle Theme
+                      </div>
+                    </div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div
+                        onClick={() => { setProfileOpen(false); handleLogout(); }}
+                        style={{
+                          padding: '10px 16px', cursor: 'pointer', fontSize: 14,
+                          color: '#f87171', fontWeight: 600,
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(248,113,113,0.08)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        Logout
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <button
                 className="seller-mobile-toggle"

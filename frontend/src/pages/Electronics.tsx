@@ -1,30 +1,38 @@
 import React, { useState } from 'react';
 import Footer from '../components/Footer';
 import ProductCard from '../components/ProductCard';
-import { allProducts } from '../data/allProducts';
+import { useFrappeProducts } from '../hooks/useFrappeProducts';
 import '../styles/ProductListing.css';
 
 const Electronics: React.FC = () => {
     const [selectedSubcategory, setSelectedSubcategory] = useState('All');
     const [sortBy, setSortBy] = useState('popular');
+    const { products: liveProducts, loading } = useFrappeProducts('Electronics');
 
     const subcategories = ['All', 'Mobile', 'Laptop', 'Headphones', 'Watch', 'TV', 'Appliance'];
 
-    const filteredProducts = (() => {
-        // Start with all Electronics category products from central data
-        let products = allProducts.filter(p => p.category === 'Electronics');
+    const KEYWORDS: Record<string, string[]> = {
+        'mobile':     ['mobile', 'phone', 'iphone', 'samsung', 'smartphone', 'android'],
+        'laptop':     ['laptop', 'macbook', 'notebook', 'computer', 'chromebook'],
+        'headphones': ['headphone', 'earphone', 'earbuds', 'headset', 'wh-', 'airpod'],
+        'watch':      ['watch', 'smartwatch'],
+        'tv':         ['tv', 'television', 'qled', 'oled', 'smart tv', 'led tv'],
+        'appliance':  ['appliance', 'washer', 'washing', 'refrigerator', 'fridge', 'microwave'],
+    };
 
-        // Filter by subcategory tag if not 'All'
+    const filteredProducts = (() => {
+        let products = liveProducts;
+
         if (selectedSubcategory !== 'All') {
-            const subcatTag = selectedSubcategory.toLowerCase();
-            products = products.filter(p =>
-                p.tags?.some(tag => {
-                    const t = tag.toLowerCase();
-                    if (subcatTag === 'watch') return t.includes('watch') || t.includes('smartwatch');
-                    if (subcatTag === 'appliance') return t.includes('appliance') || t.includes('washer') || t.includes('fridge');
-                    return t.includes(subcatTag);
-                })
-            );
+            const kws = KEYWORDS[selectedSubcategory.toLowerCase()] || [selectedSubcategory.toLowerCase()];
+            products = products.filter(p => {
+                const searchIn = [
+                    (p.name || '').toLowerCase(),
+                    (p.category || '').toLowerCase(),
+                    ...(p.tags || []).map((t: string) => t.toLowerCase()),
+                ];
+                return kws.some(kw => searchIn.some(s => s.includes(kw)));
+            });
         }
 
         // Apply Sorting
@@ -82,13 +90,18 @@ const Electronics: React.FC = () => {
                 </div>
 
                 <div className="products-grid fade-in">
-                    {filteredProducts.map((product) => (
-                        <ProductCard key={product.id} {...product} />
-                    ))}
-                    {filteredProducts.length === 0 && (
+                    {loading ? (
+                        Array.from({ length: 8 }).map((_, i) => (
+                            <div key={i} style={{ background: '#f1f5f9', borderRadius: 12, height: 320, animation: 'shimmer 1.4s infinite' }} />
+                        ))
+                    ) : filteredProducts.length === 0 ? (
                         <div className="no-results" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '60px 0' }}>
                             <p>No products found in this category.</p>
                         </div>
+                    ) : (
+                        filteredProducts.map((product) => (
+                            <ProductCard key={product.id} {...product} />
+                        ))
                     )}
                 </div>
             </div>

@@ -6,7 +6,7 @@
 .seller-layout {
   display: grid;
   grid-template-columns: 250px 1fr;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto;
   min-height: 100vh;
   background: #f0f2f5;
 }
@@ -20,9 +20,9 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  position: sticky;
+  position: sticky; /* Fixed to viewport */
   top: 0;
-  overflow-y: auto;
+  overflow-y: auto; /* Scrollable menu items if they overflow */
   z-index: 100;
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.3);
 }
@@ -34,6 +34,9 @@
   padding: 24px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   text-decoration: none;
+  background: #1a1a2e;
+  flex-shrink: 0; /* Header stays fixed */
+  z-index: 10;
 }
 
 .seller-sidebar-logo-icon {
@@ -64,6 +67,15 @@
 .seller-nav {
   flex: 1;
   padding: 16px 0;
+}
+
+.seller-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.seller-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
 }
 
 .seller-nav-section {
@@ -123,6 +135,8 @@
 .seller-sidebar-bottom {
   padding: 16px 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1a1a2e;
+  margin-top: auto; /* Push to bottom of sidebar */
 }
 
 .seller-sidebar-user {

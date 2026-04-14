@@ -15,7 +15,7 @@ interface InventoryItem {
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': 'fetch' },
+    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
     ...options,
   });
   return res.json() as Promise<T>;
@@ -37,7 +37,7 @@ export default function SellerInventory() {
     setLoading(true);
     try {
       const res = await apiFetch<{ data: InventoryItem[] }>(
-        '/api/resource/Item?limit=100&fields=["name","item_name","item_group","actual_qty","reserved_qty","projected_qty"]&order_by=actual_qty asc'
+        '/api/resource/Item?limit=100&fields=["name","item_name","item_group"]'
       );
       setItems(res.data || []);
     } catch {

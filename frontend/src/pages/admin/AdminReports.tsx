@@ -16,7 +16,7 @@ interface Item {
   item_name: string;
   item_group: string;
   standard_rate: number;
-  actual_qty: number;
+  selling_price?: number;
   supplier?: string;
 }
 
@@ -29,7 +29,7 @@ interface Supplier {
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const r = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': 'fetch' },
+    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
     ...options,
   });
   return r.json();
@@ -72,7 +72,7 @@ export default function AdminReports() {
             '/api/resource/Sales%20Order?fields=["name","grand_total","transaction_date","customer_name","status"]&filters=[["docstatus","=","1"]]&limit=500'
           ),
           apiRequest<{ data: Item[] }>(
-            '/api/resource/Item?fields=["name","item_name","item_group","standard_rate","actual_qty","supplier"]&limit=300'
+            '/api/resource/Item?fields=["name","item_name","item_group","supplier"]&limit=300'
           ),
           apiRequest<{ data: Supplier[] }>(
             '/api/resource/Supplier?fields=["name","supplier_name","supplier_type"]&limit=100'
@@ -150,10 +150,10 @@ export default function AdminReports() {
     return supplierRecord ? supplierRecord.supplier_name : topName;
   }, [items, suppliers]);
 
-  // Top 10 products by standard_rate
+  // Top 10 products by price
   const topProducts = useMemo(() =>
     [...items]
-      .sort((a, b) => (b.standard_rate ?? 0) - (a.standard_rate ?? 0))
+      .sort((a, b) => (b.selling_price ?? b.standard_rate ?? 0) - (a.selling_price ?? a.standard_rate ?? 0))
       .slice(0, 10),
     [items]
   );
@@ -309,14 +309,14 @@ export default function AdminReports() {
                       <span className="admin-badge draft">{item.item_group || '—'}</span>
                     </td>
                     <td style={{ fontWeight: 600, color: '#059669' }}>
-                      {formatCurrency(item.standard_rate ?? 0)}
+                      {formatCurrency(item.selling_price ?? item.standard_rate ?? 0)}
                     </td>
                     <td>
                       <span style={{
                         fontWeight: 600,
-                        color: (item.actual_qty ?? 0) > 0 ? '#0f172a' : '#ef4444',
+                        color: '#0f172a',
                       }}>
-                        {item.actual_qty ?? 0}
+                        —
                       </span>
                     </td>
                   </tr>

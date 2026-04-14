@@ -17,7 +17,7 @@ interface Customer {
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const r = await fetch(BASE + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': 'fetch' },
+    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') },
     ...options,
   });
   return r.json();

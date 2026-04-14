@@ -13,6 +13,8 @@ interface ProductCardProps {
     category?: string;
 }
 
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600';
+
 const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, rating = 4.5, category }) => {
     const navigate = useNavigate();
     const { addToCart } = useCart();
@@ -44,7 +46,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, ratin
         <div className="product-card glass-effect" style={{ display: 'flex', flexDirection: 'column' }}>
             <Link to={`/product/${id}`} style={{ textDecoration: 'none', color: 'inherit', flex: 1 }}>
                 <div className="product-image">
-                    <img src={image} alt={name} />
+                    <img
+                        src={image}
+                        alt={name}
+                        onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
+                    />
                     <button 
                         className={`wishlist-toggle ${isWishlisted(id) ? 'active' : ''}`} 
                         onClick={handleWishlist}

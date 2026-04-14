@@ -38,7 +38,7 @@ function apiFetch(path: string, options?: RequestInit) {
   return fetch(`${BASE}${path}`, {
     credentials: 'include',
     headers: {
-      'X-Frappe-CSRF-Token': 'fetch',
+      'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''),
       'Content-Type': 'application/json',
     },
     ...options,

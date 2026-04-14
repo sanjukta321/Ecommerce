@@ -6,7 +6,8 @@
 .admin-layout {
   display: grid;
   grid-template-columns: 260px 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #f0f4f8;
 }
 
@@ -18,8 +19,6 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  position: sticky;
-  top: 0;
   overflow-y: auto;
   z-index: 100;
   box-shadow: 2px 0 16px rgba(0, 0, 0, 0.4);
@@ -167,8 +166,8 @@
   grid-column: 2;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  overflow: hidden;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .admin-header {
@@ -181,6 +180,7 @@
   position: sticky;
   top: 0;
   z-index: 50;
+  flex-shrink: 0;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
@@ -375,6 +375,23 @@
   background: rgba(239,68,68,0.12); color: #dc2626;
 }
 .admin-badge.draft { background: #f1f5f9; color: #64748b; }
+.admin-badge.in-stock  { background: rgba(16,185,129,0.12); color: #059669; }
+.admin-badge.low-stock { background: rgba(245,158,11,0.12); color: #d97706; }
+.admin-badge.out-stock { background: rgba(239,68,68,0.12);  color: #dc2626; }
+
+/* Stock inline edit */
+.admin-stock-cell { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.admin-stock-edit { display: flex; align-items: center; gap: 4px; }
+.admin-stock-input {
+  width: 64px; padding: 3px 7px; border-radius: 6px;
+  border: 1.5px solid #6c63ff; font-size: 13px; outline: none;
+}
+.admin-stock-save, .admin-stock-cancel {
+  border: none; border-radius: 5px; padding: 3px 7px;
+  font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1;
+}
+.admin-stock-save   { background: #059669; color: #fff; }
+.admin-stock-cancel { background: #e2e8f0; color: #475569; }
 
 /* Buttons */
 .admin-btn-primary {
@@ -703,6 +720,8 @@
 @media (max-width: 900px) {
   .admin-layout {
     grid-template-columns: 1fr;
+    height: 100vh;
+    overflow: hidden;
   }
 
   .admin-sidebar {
@@ -710,10 +729,19 @@
     left: -260px;
     top: 0;
     height: 100vh;
-    transition: left 0.25s;
+    transition: left 0.25s ease;
+    z-index: 200;
   }
 
   .admin-sidebar.open { left: 0; }
+
+  .admin-sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 199;
+  }
 
   .admin-sidebar-overlay.open {
     display: block;
@@ -721,6 +749,8 @@
 
   .admin-main {
     grid-column: 1;
+    height: 100vh;
+    overflow-y: auto;
   }
 
   .admin-mobile-toggle { display: flex; }

@@ -5,10 +5,12 @@
   <link rel="icon" type="image/svg+xml" href="/assets/store_customizations/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SB Store</title>
+  <!-- CSRF token injected by Frappe — read by React for all POST requests -->
+  <meta name="csrf-token" content="{{ csrf_token }}"  />
   <!-- React bundle — built by: cd frontend && npm run build -->
   <!-- Deployed by: bench build --app store_customizations  -->
-  <script type="module" crossorigin src="/assets/store_customizations/index.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/store_customizations/index.css" />
+  <script type="module" crossorigin src="/assets/store_customizations/index.js?v={{ asset_version }}"></script>
+  <link rel="stylesheet" crossorigin href="/assets/store_customizations/index.css?v={{ asset_version }}" />
 </head>
 <body>
   <div id="root"></div>
