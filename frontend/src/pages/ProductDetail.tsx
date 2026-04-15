@@ -34,11 +34,7 @@ interface DisplayProduct {
     tags?: string[];
 }
 
-const PLACEHOLDER = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=1000';
-const EXTRA_IMAGES = [
-    'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=1000',
-    'https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&q=80&w=1000',
-];
+const PLACEHOLDER = 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&q=80&w=1000';
 
 function buildDisplayFromFrappe(item: FrappeItem): DisplayProduct {
     const rate = item.selling_price || item.standard_rate || 0;
@@ -54,7 +50,7 @@ function buildDisplayFromFrappe(item: FrappeItem): DisplayProduct {
         price,
         originalPrice,
         image: img,
-        images: [img, ...EXTRA_IMAGES],
+        images: [img],
         category: item.item_group || 'General',
         rating: 4.5,
         reviews: 256,
@@ -87,7 +83,7 @@ function buildDisplayFromStatic(p: typeof allProducts[0]): DisplayProduct {
         price: p.price,
         originalPrice: `₹${Math.round(numericRate * 1.2).toLocaleString('en-IN')}`,
         image: p.image,
-        images: [p.image, ...EXTRA_IMAGES],
+        images: [p.image],
         category: p.category,
         rating: p.rating,
         reviews: 456 + (p.name.length * 10),
@@ -201,17 +197,19 @@ const ProductDetail: React.FC = () => {
                         <div className="main-image">
                             <img src={product.images[activeImage]} alt={product.name} />
                         </div>
-                        <div className="thumbnail-strip">
-                            {product.images.map((img, idx) => (
-                                <img
-                                    key={idx}
-                                    src={img}
-                                    alt={`View ${idx + 1}`}
-                                    className={activeImage === idx ? 'active' : ''}
-                                    onClick={() => setActiveImage(idx)}
-                                />
-                            ))}
-                        </div>
+                        {product.images.length > 1 && (
+                            <div className="thumbnail-strip">
+                                {product.images.map((img, idx) => (
+                                    <img
+                                        key={idx}
+                                        src={img}
+                                        alt={`View ${idx + 1}`}
+                                        className={activeImage === idx ? 'active' : ''}
+                                        onClick={() => setActiveImage(idx)}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Product Info */}
