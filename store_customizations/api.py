@@ -310,6 +310,38 @@ def get_all_products(item_group=None, limit=100):
 
     return items
 
+
+@frappe.whitelist(allow_guest=True)
+def get_product(item_code):
+    """Return full details for a single product by item_code."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    if not frappe.db.exists("Item", item_code):
+        frappe.throw(f"Item not found: {item_code}", frappe.DoesNotExistError)
+
+    item = frappe.db.get_value(
+        "Item",
+        item_code,
+        ["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled"],
+        as_dict=True,
+    )
+
+    if not item or item.get("disabled"):
+        frappe.throw(f"Item not found: {item_code}", frappe.DoesNotExistError)
+
+    # Fetch selling price from Item Price
+    selling_price = frappe.db.get_value(
+        "Item Price",
+        {"item_code": item_code, "selling": 1},
+        "price_list_rate",
+        order_by="modified desc",
+    )
+    item["selling_price"] = selling_price or item.get("standard_rate") or 0
+
+    return item
+
+
 # Example — uncomment and customise when needed:
 #
 # @frappe.whitelist(allow_guest=True)
