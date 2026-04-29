@@ -36,10 +36,10 @@ export default function SellerInventory() {
   const loadItems = async () => {
     setLoading(true);
     try {
-      const res = await apiFetch<{ data: InventoryItem[] }>(
-        '/api/resource/Item?limit=100&fields=["name","item_name","item_group"]'
+      const res = await apiFetch<{ message: InventoryItem[] }>(
+        '/api/method/store_customizations.api.get_seller_inventory'
       );
-      setItems(res.data || []);
+      setItems(res.message || []);
     } catch {
       // backend offline
     } finally {
@@ -54,9 +54,9 @@ export default function SellerInventory() {
     if (newQty === undefined || newQty === '') return;
     setSavingItem(itemName);
     try {
-      await apiFetch(`/api/resource/Item/${encodeURIComponent(itemName)}`, {
-        method: 'PUT',
-        body: JSON.stringify({ actual_qty: parseFloat(newQty) }),
+      await apiFetch('/api/method/store_customizations.api.update_item_stock', {
+        method: 'POST',
+        body: JSON.stringify({ item_code: itemName, qty: parseFloat(newQty) || 0 }),
       });
       await loadItems();
       setEditStock(prev => {
@@ -65,7 +65,7 @@ export default function SellerInventory() {
         return next;
       });
     } catch {
-      // handle
+      alert('Failed to update stock. Please try again.');
     } finally {
       setSavingItem(null);
     }

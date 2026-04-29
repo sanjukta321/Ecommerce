@@ -31,8 +31,8 @@
     width: 35px;
     height: 35px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.05);
-    border: 2px solid rgba(255, 255, 255, 0.1);
+    background: var(--input-bg);
+    border: 2px solid var(--input-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -51,7 +51,7 @@
 .progress-line {
     flex: 1;
     height: 2px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--glass-border);
     margin: -25px 15px 0;
     max-width: 100px;
 }
@@ -105,17 +105,18 @@
     display: flex;
     max-width: 400px;
     margin-bottom: 20px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: 8px;
     overflow: hidden;
 }
 
 .mobile-step .prefix {
     padding: 15px;
-    background: rgba(255, 255, 255, 0.03);
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--input-bg);
+    border-right: 1px solid var(--input-border);
     font-weight: 600;
+    color: var(--text-main);
 }
 
 .mobile-step input {
@@ -123,15 +124,16 @@
     padding: 15px;
     background: transparent;
     border: none;
-    color: white;
+    color: var(--text-main);
     font-size: 16px;
     letter-spacing: 1px;
+    outline: none;
 }
 
 .otp-section {
     margin-top: 30px;
     padding-top: 30px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid var(--glass-border);
 }
 
 .otp-section input {
@@ -141,8 +143,11 @@
     letter-spacing: 12px;
     margin-bottom: 20px;
     display: block;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--input-border);
     border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-main);
+    outline: none;
 }
 
 .resend-btn {
@@ -166,9 +171,18 @@
 .form-grid input {
     padding: 12px 15px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: white;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--text-main);
+    outline: none;
+}
+
+.form-grid input::placeholder {
+    color: var(--text-dim);
+}
+
+.form-grid input:focus {
+    border-color: var(--accent);
 }
 
 .form-grid input.full-width {
@@ -187,8 +201,8 @@
     display: flex;
     align-items: center;
     padding: 20px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: 10px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -203,7 +217,7 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border: 2px solid var(--input-border);
     margin-right: 15px;
     position: relative;
 }
@@ -239,10 +253,19 @@
     width: 100%;
     padding: 15px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: white;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--text-main);
     margin-bottom: 20px;
+    outline: none;
+}
+
+.upi-input input::placeholder {
+    color: var(--text-dim);
+}
+
+.upi-input input:focus {
+    border-color: var(--accent);
 }
 
 /* Sidebar */

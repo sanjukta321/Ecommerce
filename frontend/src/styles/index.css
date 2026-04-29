@@ -14,6 +14,9 @@
   --glass-border: rgba(255, 255, 255, 0.1);
   --shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.9);
   --transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --input-border: rgba(255, 255, 255, 0.15);
+  --hover-bg: rgba(255, 255, 255, 0.06);
 }
 
 :root[data-theme='light'] {
@@ -26,9 +29,12 @@
   --text-dim: #4A5568;
   --bg-main: #FFFFFF;
   --white: #000000;
-  --glass: rgba(255, 255, 255, 0.95);
-  --glass-border: rgba(200, 200, 200, 0.3);
+  --glass: rgba(248, 249, 250, 0.98);
+  --glass-border: rgba(0, 0, 0, 0.12);
   --shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.1);
+  --input-bg: rgba(0, 0, 0, 0.04);
+  --input-border: rgba(0, 0, 0, 0.18);
+  --hover-bg: rgba(0, 0, 0, 0.05);
 }
 
 * {

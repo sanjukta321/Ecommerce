@@ -89,14 +89,36 @@
     position: absolute;
     top: calc(100% + 10px);
     left: 0;
-    width: 350px;
-    background: rgba(11, 12, 13, 0.98);
+    width: 400px;
+    background: var(--glass);
     backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
     border-radius: 12px;
-    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 480px;
+    z-index: 1000;
     animation: dropdownFadeIn 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.suggestions-list {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.suggestions-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.suggestions-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.suggestions-list::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 2px;
 }
 
 @keyframes dropdownFadeIn {
@@ -118,7 +140,7 @@
     padding: 12px 15px;
     cursor: pointer;
     transition: var(--transition);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--glass-border);
 }
 
 .suggestion-item:last-of-type {
@@ -127,15 +149,15 @@
 
 .suggestion-item:hover,
 .suggestion-item.active {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--hover-bg);
 }
 
 .suggestion-image {
-    width: 45px;
-    height: 60px;
-    border-radius: 4px;
+    width: 60px;
+    height: 75px;
+    border-radius: 6px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--input-bg);
     flex-shrink: 0;
 }
 
@@ -151,17 +173,17 @@
 }
 
 .suggestion-name {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
-    color: white;
+    color: var(--text-main);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
 }
 
 .suggestion-category {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
 }
 
@@ -211,10 +233,11 @@
     visibility: hidden;
     transition: var(--transition);
     margin-top: 20px;
-    background: rgba(11, 12, 13, 0.98);
+    background: var(--glass);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(0, 0, 0, 0.8);
+    border: 1px solid var(--glass-border);
     border-radius: 12px;
+    box-shadow: var(--shadow);
 }
 
 .mega-menu-trigger:hover .mega-menu {
@@ -263,7 +286,7 @@
     padding: 6px 16px;
     border-radius: 8px;
     border: none;
-    color: #FFFFFF;
+    color: var(--bg-main);
     font-weight: 700;
     animation: pulseHighlight 2s infinite;
 }
@@ -306,11 +329,11 @@
     top: 100%;
     right: 0;
     width: 220px;
-    background: rgba(11, 12, 13, 0.98);
+    background: var(--glass);
     backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
     border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow);
     padding: 10px 0;
     opacity: 0;
     visibility: hidden;
@@ -333,9 +356,9 @@
     right: 35px;
     width: 12px;
     height: 12px;
-    background: rgba(11, 12, 13, 0.98);
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--glass);
+    border-left: 1px solid var(--glass-border);
+    border-top: 1px solid var(--glass-border);
     transform: rotate(45deg);
 }
 
@@ -347,7 +370,7 @@
 
 .account-dropdown .divider {
     height: 1px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--glass-border);
     margin: 8px 0;
 }
 
@@ -358,7 +381,7 @@
 .dropdown-info h3 {
     font-size: 14px;
     font-weight: 700;
-    color: white;
+    color: var(--text-main);
     margin-bottom: 4px;
 }
 
@@ -385,16 +408,16 @@
 
 .login-btn:hover {
     background: var(--accent);
-    color: white !important;
+    color: var(--bg-main) !important;
 }
 
 .signup-btn-dropdown {
     display: block;
     width: fit-content;
     padding: 6px 20px;
-    background: white;
-    border: 1px solid #e0e0e0;
-    color: #212121 !important;
+    background: var(--input-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main) !important;
     font-weight: 700;
     font-size: 12px;
     border-radius: 4px;
@@ -412,7 +435,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 20px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-main);
     font-size: 14px;
     font-weight: 500;
     transition: var(--transition);
@@ -425,7 +448,7 @@
 }
 
 .account-dropdown ul li a:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--hover-bg);
     color: var(--accent);
     padding-left: 25px;
 }
@@ -444,7 +467,7 @@
 
 .account-dropdown .logout {
     font-weight: 700;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid var(--glass-border);
     margin-top: 5px;
 }
 
@@ -496,7 +519,7 @@
 .mobile-toggle span {
     width: 25px;
     height: 2px;
-    background: white;
+    background: var(--text-main);
     transition: var(--transition);
 }
 

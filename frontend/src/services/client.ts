@@ -2,7 +2,7 @@
  * Base HTTP client for all Frappe API calls.
  *
  * CSRF token strategy (in priority order):
- *  1. <meta name="csrf-token"> — injected by Frappe in www/index.html via {{ csrf_token }}
+ *  1. window.frappe.csrf_token — injected by Frappe via <!-- csrf_token --> in www/index.html
  *     This is always present when the app is served through Frappe.
  *  2. API fallback — GET /api/method/store_customizations.api.get_csrf_token
  *     Used in local dev when the app runs on a separate Vite port (no Frappe template).
@@ -24,15 +24,20 @@ export class ApiError extends Error {
 let _cachedToken: string | null = null;
 let _tokenFetch: Promise<string> | null = null;
 
-function getMetaToken(): string | null {
+function getInjectedToken(): string | null {
+  // Frappe replaces <!-- csrf_token --> with <script>frappe.csrf_token = "...";</script>
+  const token = (window as unknown as { frappe?: { csrf_token?: string } }).frappe?.csrf_token;
+  if (token && token !== 'None') return token;
+  // Legacy: meta tag fallback
   const content = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-  return content || null;
+  if (content && content !== 'None') return content;
+  return null;
 }
 
 function resolveToken(): Promise<string> {
-  // Fast path: Frappe injects the token into the <meta> tag on every page load
-  const meta = getMetaToken();
-  if (meta) return Promise.resolve(meta);
+  // Fast path: Frappe injects the token via script tag on every page load
+  const injected = getInjectedToken();
+  if (injected) return Promise.resolve(injected);
 
   // Cached value from a previous API fetch
   if (_cachedToken !== null) return Promise.resolve(_cachedToken);

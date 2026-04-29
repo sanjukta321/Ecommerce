@@ -137,7 +137,7 @@ function App() {
   return (
     <CartProvider>
       <WishlistProvider>
-        <Router>
+        <Router basename="/shop">
           <AppInner />
         </Router>
       </WishlistProvider>

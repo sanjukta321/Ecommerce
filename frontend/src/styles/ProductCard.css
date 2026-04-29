@@ -164,7 +164,7 @@
 /* Two-button action row at bottom of card */
 .card-action-row {
     display: flex;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--glass-border);
     border-radius: 0 0 12px 12px;
     overflow: hidden;
 }
@@ -186,7 +186,7 @@
 
 .card-add-to-cart-btn {
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--bg-main);
     border: none;
 }
 
@@ -195,12 +195,12 @@
 }
 
 .card-buy-now-btn {
-    background: #FFFFFF;
+    background: var(--glass);
     border: 1px solid var(--accent);
     color: var(--accent);
 }
 
 .card-buy-now-btn:hover {
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--bg-main);
 }

@@ -6,8 +6,21 @@ import '../styles/Checkout.css';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
-function getCsrfToken(): string {
-    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch';
+async function getCsrfToken(): Promise<string> {
+    // Frappe injects the real token via window.frappe.csrf_token on every page load
+    const frappeToken = (window as any).frappe?.csrf_token;
+    if (frappeToken && frappeToken !== 'None') return frappeToken;
+    // Meta tag fallback
+    const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (metaToken && metaToken !== 'None') return metaToken;
+    // Last resort: fetch from API
+    try {
+        const res = await fetch(`${BASE}/api/method/store_customizations.api.get_csrf_token`, { credentials: 'include' });
+        const d = await res.json();
+        return d.message || '';
+    } catch {
+        return '';
+    }
 }
 
 type CheckoutStep = 'mobile' | 'address' | 'payment' | 'success';
@@ -98,6 +111,7 @@ const Checkout: React.FC = () => {
                 mobile:         mobile,
             });
 
+            const csrfToken = await getCsrfToken();
             const res = await fetch(
                 `${BASE}/api/method/store_customizations.api.place_order`,
                 {
@@ -105,7 +119,7 @@ const Checkout: React.FC = () => {
                     credentials: 'include',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Frappe-CSRF-Token': getCsrfToken(),
+                        'X-Frappe-CSRF-Token': csrfToken,
                     },
                     body: params.toString(),
                 }

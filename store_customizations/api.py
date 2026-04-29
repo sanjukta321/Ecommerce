@@ -238,6 +238,108 @@ def register_customer(contact, otp, full_name, password, email=None, phone=None)
     return {"message": "Account created successfully"}
 
 
+@frappe.whitelist(allow_guest=True)
+def send_forgot_password_otp(contact):
+    """
+    Send a 6-digit OTP to the customer's registered email or mobile so they
+    can reset a forgotten password.
+
+    The account must already exist; if it doesn't we return a generic message
+    to avoid leaking which contacts are registered.
+    """
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    contact = (contact or "").strip()
+    if not contact:
+        frappe.throw("Email or mobile number is required.")
+
+    # Verify the account exists without leaking whether it does or not
+    if _is_email(contact):
+        user_exists = frappe.db.exists("User", contact)
+    else:
+        user_exists = bool(frappe.db.get_value("User", {"mobile_no": contact}, "name"))
+
+    # Always respond with the same message to prevent user enumeration
+    if not user_exists:
+        return {"message": "If an account exists, an OTP has been sent."}
+
+    otp = str(secrets.randbelow(900000) + 100000)
+    frappe.cache().set_value(f"fp_otp_{contact}", otp, expires_in_sec=300)
+    frappe.cache().delete_value(f"fp_otp_attempts_{contact}")
+
+    if _is_email(contact):
+        try:
+            frappe.sendmail(
+                recipients=[contact],
+                subject="Reset your SB Store password",
+                message=(
+                    f"Your password reset OTP is: <b>{otp}</b>.<br>"
+                    "It is valid for 5 minutes. Do not share it with anyone."
+                ),
+            )
+        except Exception:
+            pass  # Don't expose mail errors; OTP is still in cache for dev
+
+    return {"message": "If an account exists, an OTP has been sent."}
+
+
+@frappe.whitelist(allow_guest=True)
+def reset_password_with_otp(contact, otp, new_password):
+    """
+    Verify the forgot-password OTP and set a new password for the customer.
+
+    Steps:
+      1. Look up the user by email or mobile.
+      2. Validate the OTP (max 5 attempts, 5-minute TTL).
+      3. Update the password and clear the OTP from cache.
+    """
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    contact = (contact or "").strip()
+    otp = (otp or "").strip()
+    new_password = new_password or ""
+
+    if not all([contact, otp, new_password]):
+        frappe.throw("Contact, OTP, and new password are required.")
+    if len(new_password) < 8:
+        frappe.throw("Password must be at least 8 characters.")
+
+    # Resolve the Frappe User email regardless of whether contact is email/mobile
+    if _is_email(contact):
+        user_email = contact if frappe.db.exists("User", contact) else None
+    else:
+        user_email = frappe.db.get_value("User", {"mobile_no": contact}, "name")
+
+    if not user_email:
+        frappe.throw("No account found for this contact.")
+
+    cache_key = f"fp_otp_{contact}"
+    stored_otp = frappe.cache().get_value(cache_key)
+    if not stored_otp:
+        frappe.throw("OTP has expired. Please request a new one.")
+
+    attempt_key = f"fp_otp_attempts_{contact}"
+    attempts = int(frappe.cache().get_value(attempt_key) or 0)
+    if attempts >= 5:
+        frappe.cache().delete_value(cache_key)
+        frappe.cache().delete_value(attempt_key)
+        frappe.throw("Too many failed attempts. Please request a new OTP.")
+
+    if stored_otp != str(otp):
+        frappe.cache().set_value(attempt_key, attempts + 1, expires_in_sec=300)
+        frappe.throw("Invalid OTP. Please try again.")
+
+    # OTP is correct — reset password and clear cache
+    update_password(user_email, new_password)
+    frappe.cache().delete_value(cache_key)
+    frappe.cache().delete_value(attempt_key)
+    frappe.db.commit()
+
+    return {"message": "Password reset successfully. You can now log in."}
+
+
 # ─────────────────────────────────────────────
 #  PRODUCTS
 #  Add custom product queries here.
@@ -641,15 +743,14 @@ def save_admin_product(
 @frappe.whitelist(allow_guest=True)
 def place_order(cart_items, address, payment_method, mobile=None):
     """
-    Full e-commerce checkout flow (guest-friendly).
-    Steps: resolve/create Customer → Sales Order → Sales Invoice → Payment Entry
+    Checkout flow:
+      1. Resolve/create Customer + Address
+      2. Create Sales Order (draft) → commit → Submit SO
+      3. Create Sales Invoice from submitted SO → commit → Submit SI
+      4. Payment Entry (online only; COD skips this)
     """
     import json
 
-    # Frappe's submit() and certain db helpers re-check the current session user
-    # internally. Guest users raise AuthenticationError even with ignore_permissions.
-    # Elevating to Administrator here is the standard Frappe pattern for
-    # allow_guest=True endpoints that must create/submit documents.
     if frappe.session.user == "Guest":
         frappe.set_user("Administrator")
 
@@ -661,36 +762,46 @@ def place_order(cart_items, address, payment_method, mobile=None):
     if not cart_items:
         frappe.throw("Cart is empty")
 
-    # 1. Resolve Customer
-    customer = _checkout_resolve_customer(address, mobile)
-
-    # 2. Create / reuse Address record and link to Customer
+    # 1. Resolve Customer + Address
+    customer     = _checkout_resolve_customer(address, mobile)
     address_name = _checkout_get_or_create_address(customer, address)
 
-    # 3. Sales Order (submitted)
+    # 2. Sales Order — helper inserts it, commit locks the naming series, then submit
     so = _checkout_create_sales_order(customer, cart_items, address_name)
+    frappe.db.commit()          # lock SO name in naming series before submit
+    so.flags.ignore_permissions = True
+    so.submit()
+    frappe.db.commit()
 
-    # 4. Sales Invoice (submitted)
+    # 3. Sales Invoice from submitted SO — helper inserts it, commit, then submit
     si = _checkout_create_sales_invoice(so, customer)
+    frappe.db.commit()          # lock SI name before submit
+    si.flags.ignore_permissions = True
+    si.submit()
+    frappe.db.commit()
 
-    # 5. Payment Entry — only for online payments; soft-fail so order never blocks
-    pe_name = None
+    # 4. Payment Entry (online only; COD needs no PE)
+    pe_name        = None
+    payment_status = "cod" if payment_method == "cod" else "pending"
+
     if payment_method != "cod":
         try:
             pe_name = _checkout_create_payment_entry(si, payment_method)
+            payment_status = "paid"
         except Exception as exc:
             frappe.log_error(str(exc), "Checkout: Payment Entry")
+            payment_status = "failed"
 
     frappe.db.commit()
 
     return {
-        "success": True,
-        "sales_order":   so.name,
-        "sales_invoice": si.name,
-        "payment_entry": pe_name,
-        "order_total":   si.grand_total,
+        "success":        payment_status in ("paid", "cod"),
+        "sales_order":    so.name,
+        "sales_invoice":  si.name,
+        "payment_entry":  pe_name,
+        "order_total":    si.grand_total,
+        "payment_status": payment_status,
     }
-
 
 def _checkout_resolve_customer(address, mobile):
     """Return existing customer for logged-in user, or create a new one."""
@@ -788,64 +899,96 @@ def _checkout_get_or_create_address(customer, address):
 
 
 def _checkout_create_sales_order(customer, cart_items, address_name=None):
-    """Create and submit a Sales Order from cart items."""
+    """Create a draft Sales Order from cart items."""
     delivery_date = frappe.utils.add_days(frappe.utils.today(), 5)
+    company = frappe.defaults.get_defaults().get("company") or frappe.db.get_value("Company", {}, "name")
 
     so = frappe.new_doc("Sales Order")
-    so.customer = customer
-    so.transaction_date = frappe.utils.today()
-    so.delivery_date = delivery_date
-    so.order_type = "Sales"
+    so.company           = company
+    so.customer          = customer
+    so.transaction_date  = frappe.utils.today()
+    so.delivery_date     = delivery_date
+    so.order_type        = "Sales"
     so.ignore_pricing_rule = 1
 
     if address_name:
-        so.customer_address      = address_name   # billing address
-        so.shipping_address_name = address_name   # shipping address
+        so.customer_address      = address_name
+        so.shipping_address_name = address_name
 
     for item in cart_items:
         item_code = item.get("id") or item.get("item_code")
         if not frappe.db.exists("Item", item_code):
             frappe.throw(f"Item not found: {item_code}")
         so.append("items", {
-            "item_code":    item_code,
-            "qty":          float(item.get("quantity", 1)),
-            "rate":         float(item.get("price", 0)),
+            "item_code":     item_code,
+            "qty":           float(item.get("quantity", 1)),
+            "rate":          float(item.get("price", 0)),
             "delivery_date": delivery_date,
         })
 
-    so.insert(ignore_permissions=True)
     so.flags.ignore_permissions = True
-    so.submit()
-    return so
+    so.insert(ignore_permissions=True)
+    return so   # draft; submitted after payment confirmed
 
 
 def _checkout_create_sales_invoice(so, customer):
-    """Create and submit a Sales Invoice linked to the Sales Order."""
+    """Create a Sales Invoice from the submitted Sales Order."""
     try:
         from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
         si = make_sales_invoice(so.name)
     except Exception:
-        # Fallback: build invoice manually when ERPNext helper unavailable
+        company = so.company or frappe.defaults.get_defaults().get("company") or frappe.db.get_value("Company", {}, "name")
         si = frappe.new_doc("Sales Invoice")
-        si.customer = customer
+        si.company      = company
+        si.customer     = customer
         si.posting_date = frappe.utils.today()
+        si.due_date     = frappe.utils.today()
         for so_item in so.items:
             si.append("items", {
-                "item_code":  so_item.item_code,
-                "qty":        so_item.qty,
-                "rate":       so_item.rate,
+                "item_code":   so_item.item_code,
+                "qty":         so_item.qty,
+                "rate":        so_item.rate,
                 "sales_order": so.name,
             })
 
     si.flags.ignore_permissions = True
     si.insert(ignore_permissions=True)
-    si.flags.ignore_permissions = True
-    si.submit()
     return si
+
+
+def _checkout_submit_order(so, si) -> None:
+    """Submit both the Sales Order and Sales Invoice once payment is confirmed."""
+    so.flags.ignore_permissions = True
+    so.reload()
+    if so.docstatus == 0:
+        so.submit()
+
+    si.flags.ignore_permissions = True
+    si.reload()
+    if si.docstatus == 0:
+        si.submit()
+
+
+def _get_mode_of_payment(payment_method: str) -> str:
+    """Map frontend payment_method string to a valid Frappe Mode of Payment."""
+    mode_map = {
+        "upi":  "UPI",
+        "card": "Credit Card",
+        "cod":  "Cash",
+        "bank": "Bank Transfer",
+    }
+    desired = mode_map.get(payment_method, "Cash")
+    if not frappe.db.exists("Mode of Payment", desired):
+        # Graceful fallback to Cash if the desired mode isn't configured
+        return "Cash"
+    return desired
 
 
 def _checkout_create_payment_entry(si, payment_method):
     """Create and submit a Payment Entry for the Sales Invoice."""
+    company = si.company or frappe.defaults.get_defaults().get("company") or frappe.db.get_value("Company", {}, "name")
+    mode_of_payment = _get_mode_of_payment(payment_method)
+
     try:
         from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
         pe = get_payment_entry("Sales Invoice", si.name)
@@ -853,30 +996,35 @@ def _checkout_create_payment_entry(si, payment_method):
         # Minimal manual payment entry
         pe = frappe.new_doc("Payment Entry")
         pe.payment_type = "Receive"
+        pe.company = company
         pe.party_type = "Customer"
         pe.party = si.customer
         pe.paid_amount = si.grand_total
         pe.received_amount = si.grand_total
 
         receivable = frappe.db.get_value(
-            "Account", {"account_type": "Receivable", "is_group": 0}, "name"
+            "Account", {"account_type": "Receivable", "is_group": 0, "company": company}, "name"
         )
         cash = frappe.db.get_value(
-            "Account", {"account_type": "Cash", "is_group": 0}, "name"
+            "Account", {"account_type": "Cash", "is_group": 0, "company": company}, "name"
         )
         if not receivable or not cash:
             frappe.throw("Chart of accounts not configured for payment entry")
 
         pe.paid_from = receivable
         pe.paid_to = cash
+        company_currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
+        pe.paid_from_account_currency = company_currency
+        pe.paid_to_account_currency = company_currency
+        pe.source_exchange_rate = 1
+        pe.target_exchange_rate = 1
         pe.append("references", {
             "reference_doctype": "Sales Invoice",
             "reference_name":    si.name,
             "allocated_amount":  si.grand_total,
         })
 
-    mode_labels = {"upi": "Cash", "card": "Cash", "cod": "Cash"}
-    pe.mode_of_payment = mode_labels.get(payment_method, "Cash")
+    pe.mode_of_payment = mode_of_payment
     pe.reference_no = f"TXN-{frappe.utils.random_string(8).upper()}"
     pe.reference_date = frappe.utils.today()
 
@@ -885,6 +1033,110 @@ def _checkout_create_payment_entry(si, payment_method):
     pe.flags.ignore_permissions = True
     pe.submit()
     return pe.name
+
+
+@frappe.whitelist(allow_guest=True)
+def get_order_status(sales_order):
+    """
+    Return the status of a Sales Order including linked invoice and payment.
+    Used by the frontend to poll after checkout.
+    """
+    if not frappe.db.exists("Sales Order", sales_order):
+        frappe.throw(f"Order not found: {sales_order}", frappe.DoesNotExistError)
+
+    so = frappe.db.get_value(
+        "Sales Order", sales_order,
+        ["name", "status", "grand_total", "customer", "transaction_date"],
+        as_dict=True,
+    )
+
+    # Find linked Sales Invoice via SO reference on invoice items
+    si_name = frappe.db.get_value(
+        "Sales Invoice Item", {"sales_order": sales_order}, "parent"
+    )
+    invoice_status = None
+    payment_status = "Unpaid"
+    outstanding    = None
+
+    if si_name:
+        si_data = frappe.db.get_value(
+            "Sales Invoice", si_name,
+            ["status", "outstanding_amount"], as_dict=True
+        )
+        invoice_status = si_data.status
+        outstanding    = si_data.outstanding_amount
+        pe_exists = frappe.db.exists(
+            "Payment Entry Reference",
+            {"reference_doctype": "Sales Invoice", "reference_name": si_name},
+        )
+        payment_status = "Paid" if pe_exists else "Unpaid"
+
+    return {
+        "sales_order":    so.name,
+        "order_status":   so.status,
+        "grand_total":    so.grand_total,
+        "sales_invoice":  si_name,
+        "invoice_status": invoice_status,
+        "outstanding":    outstanding,
+        "payment_status": payment_status,
+    }
+
+
+@frappe.whitelist(allow_guest=True)
+def update_payment_status(sales_invoice, transaction_id, status, payment_method="upi"):
+    """
+    Called by the frontend after a payment gateway redirect/callback.
+    If status is 'success' and no Payment Entry exists yet, create one.
+    Returns updated order status.
+    """
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    if not frappe.db.exists("Sales Invoice", sales_invoice):
+        frappe.throw(f"Invoice not found: {sales_invoice}", frappe.DoesNotExistError)
+
+    si = frappe.get_doc("Sales Invoice", sales_invoice)
+
+    if status == "success":
+        # Submit SO + SI if still in draft (payment just confirmed by gateway)
+        so_name = frappe.db.get_value("Sales Invoice Item", {"parent": sales_invoice}, "sales_order")
+        if so_name and frappe.db.exists("Sales Order", so_name):
+            so = frappe.get_doc("Sales Order", so_name)
+            _checkout_submit_order(so, si)
+        else:
+            # Invoice not linked to an SO — submit invoice alone
+            si.flags.ignore_permissions = True
+            si.reload()
+            if si.docstatus == 0:
+                si.submit()
+
+        # Create Payment Entry if one doesn't exist yet
+        pe_exists = frappe.db.exists(
+            "Payment Entry Reference",
+            {"reference_doctype": "Sales Invoice", "reference_name": sales_invoice},
+        )
+        if not pe_exists:
+            try:
+                si.reload()
+                pe_name = _checkout_create_payment_entry(si, payment_method)
+                frappe.db.set_value("Payment Entry", pe_name, "reference_no", transaction_id)
+                frappe.db.commit()
+            except Exception as exc:
+                frappe.log_error(str(exc), "update_payment_status: Payment Entry")
+                return {"success": False, "error": str(exc)}
+
+        return {
+            "success": True,
+            "sales_invoice": sales_invoice,
+            "payment_status": "Paid",
+        }
+
+    # Payment failed — log it, leave invoice outstanding
+    frappe.log_error(
+        f"Payment failed for {sales_invoice}: txn={transaction_id}",
+        "update_payment_status: Failed",
+    )
+    return {"success": False, "payment_status": "Unpaid", "sales_invoice": sales_invoice}
 
 
 @frappe.whitelist()
@@ -906,8 +1158,102 @@ def get_admin_summary():
 
 
 @frappe.whitelist()
+def get_seller_inventory():
+    """Return all items enriched with Bin stock data for the seller inventory page."""
+    items = frappe.get_all(
+        "Item",
+        filters={"has_variants": 0},
+        fields=["name", "item_name", "item_group"],
+        order_by="item_name asc",
+        limit=500,
+    )
+    if not items:
+        return []
+
+    item_codes = [i["name"] for i in items]
+    bins = frappe.get_all(
+        "Bin",
+        filters={"item_code": ["in", item_codes]},
+        fields=["item_code", "actual_qty", "reserved_qty", "projected_qty"],
+    )
+    bin_map: dict = {}
+    for b in bins:
+        code = b["item_code"]
+        if code not in bin_map:
+            bin_map[code] = {"actual_qty": 0.0, "reserved_qty": 0.0, "projected_qty": 0.0}
+        bin_map[code]["actual_qty"]    += float(b["actual_qty"] or 0)
+        bin_map[code]["reserved_qty"]  += float(b["reserved_qty"] or 0)
+        bin_map[code]["projected_qty"] += float(b["projected_qty"] or 0)
+
+    for item in items:
+        bdata = bin_map.get(item["name"], {})
+        item["actual_qty"]    = bdata.get("actual_qty", 0.0)
+        item["reserved_qty"]  = bdata.get("reserved_qty", 0.0)
+        item["projected_qty"] = bdata.get("projected_qty", 0.0)
+
+    items.sort(key=lambda x: x["actual_qty"])   # lowest stock first
+    return items
+
+
+@frappe.whitelist()
+def save_seller_product(
+    item_name, item_group, price,
+    stock_qty=0, description="", image="", published=1,
+    item_code=None,
+):
+    """Create or update a product from the seller portal (Supplier role required)."""
+    roles = frappe.get_roles()
+    if not ({"Supplier", "System Manager", "Administrator"} & set(roles)):
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    # Delegate to the shared save logic
+    return save_admin_product(
+        item_name=item_name,
+        item_group=item_group,
+        price=price,
+        stock_qty=stock_qty,
+        description=description,
+        image=image,
+        published=published,
+        item_code=item_code,
+    )
+
+
+@frappe.whitelist()
+def handle_return(invoice_name, action):
+    """
+    Approve or reject a return Sales Invoice.
+      action = 'approved'  → submit the draft return invoice
+      action = 'rejected'  → cancel if submitted, or delete if draft
+    """
+    roles = frappe.get_roles()
+    if not ({"Supplier", "System Manager", "Administrator"} & set(roles)):
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    inv = frappe.get_doc("Sales Invoice", invoice_name)
+    if not inv.is_return:
+        frappe.throw("Not a return invoice")
+
+    if action == "approved":
+        if inv.docstatus == 0:
+            inv.submit()
+        return {"status": "approved", "name": invoice_name}
+
+    if action == "rejected":
+        if inv.docstatus == 1:
+            inv.cancel()
+        elif inv.docstatus == 0:
+            frappe.delete_doc("Sales Invoice", invoice_name, ignore_permissions=True)
+        return {"status": "rejected", "name": invoice_name}
+
+    frappe.throw(f"Unknown action: {action}")
+
+
+@frappe.whitelist()
 def seed_all_missing_items():
     """Create all missing items for every frontend subcategory."""
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
     NEW_ITEMS = [
         # ── Kids Fashion ──────────────────────────────────────────────
         {'name': 'kd1', 'item_name': 'Kids Cotton Casual T-Shirt Set',   'item_group': 'Fashion', 'standard_rate': 1299,  'image': 'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&q=80&w=600'},
@@ -973,6 +1319,8 @@ def seed_all_missing_items():
 @frappe.whitelist()
 def seed_item_images():
     """One-time script: assign stock Unsplash images to all items that lack one."""
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
     IMAGE_MAP = {
         # Accessories
         'a1': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
@@ -1041,6 +1389,8 @@ def seed_item_images():
 @frappe.whitelist()
 def check_products_setup():
     """Diagnostic endpoint to check why products might not be showing."""
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
     user = frappe.session.user
     roles = frappe.get_roles(user)
     

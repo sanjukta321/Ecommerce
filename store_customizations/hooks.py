@@ -57,7 +57,7 @@ app_license = "mit"
 # ----------
 
 # Serve the React SPA at /
-home_page = "index"
+home_page = "shop"
 
 # website user home page (by Role)
 # role_home_page = {
@@ -68,31 +68,34 @@ home_page = "index"
 # React then handles client-side navigation.
 website_route_rules = [
     # Store pages
-    {"from_route": "/electronics", "to_route": "index"},
-    {"from_route": "/fashion", "to_route": "index"},
-    {"from_route": "/fashion/<path:name>", "to_route": "index"},
-    {"from_route": "/furniture", "to_route": "index"},
-    {"from_route": "/books", "to_route": "index"},
-    {"from_route": "/sports", "to_route": "index"},
-    {"from_route": "/accessories", "to_route": "index"},
-    {"from_route": "/product/<path:name>", "to_route": "index"},
-    {"from_route": "/offers", "to_route": "index"},
-    {"from_route": "/new-arrivals", "to_route": "index"},
-    {"from_route": "/search", "to_route": "index"},
-    {"from_route": "/account", "to_route": "index"},
-    {"from_route": "/profile", "to_route": "index"},
-    {"from_route": "/login", "to_route": "index"},
-    {"from_route": "/cart", "to_route": "index"},
-    {"from_route": "/wishlist", "to_route": "index"},
-    {"from_route": "/orders", "to_route": "index"},
-    {"from_route": "/checkout", "to_route": "index"},
-    {"from_route": "/become-seller", "to_route": "index"},
+    {"from_route": "/electronics", "to_route": "shop"},
+    {"from_route": "/fashion", "to_route": "shop"},
+    {"from_route": "/fashion/<path:name>", "to_route": "shop"},
+    {"from_route": "/furniture", "to_route": "shop"},
+    {"from_route": "/books", "to_route": "shop"},
+    {"from_route": "/sports", "to_route": "shop"},
+    {"from_route": "/accessories", "to_route": "shop"},
+    {"from_route": "/product/<path:name>", "to_route": "shop"},
+    {"from_route": "/offers", "to_route": "shop"},
+    {"from_route": "/new-arrivals", "to_route": "shop"},
+    {"from_route": "/search", "to_route": "shop"},
+    {"from_route": "/account", "to_route": "shop"},
+    {"from_route": "/profile", "to_route": "shop"},
+    {"from_route": "/login", "to_route": "shop"},
+    {"from_route": "/cart", "to_route": "shop"},
+    {"from_route": "/wishlist", "to_route": "shop"},
+    {"from_route": "/orders", "to_route": "shop"},
+    {"from_route": "/checkout", "to_route": "shop"},
+    {"from_route": "/become-seller", "to_route": "shop"},
     # Seller portal
-    {"from_route": "/seller", "to_route": "index"},
-    {"from_route": "/seller/<path:name>", "to_route": "index"},
+    {"from_route": "/seller", "to_route": "shop"},
+    {"from_route": "/seller/<path:name>", "to_route": "shop"},
     # Admin portal
-    {"from_route": "/admin", "to_route": "index"},
-    {"from_route": "/admin/<path:name>", "to_route": "index"},
+    {"from_route": "/admin", "to_route": "shop"},
+    {"from_route": "/admin/<path:name>", "to_route": "shop"},
+    # SB Store base
+    {"from_route": "/shop", "to_route": "shop"},
+    {"from_route": "/sbstore/<path:name>", "to_route": "shop"},
 ]
 
 # Generators
@@ -227,7 +230,7 @@ website_route_rules = [
 
 # Request Events
 # ----------------
-# before_request = ["store_customizations.utils.before_request"]
+before_request = ["store_customizations.utils.bypass_csrf_for_checkout"]
 # after_request = ["store_customizations.utils.after_request"]
 
 # Job Events

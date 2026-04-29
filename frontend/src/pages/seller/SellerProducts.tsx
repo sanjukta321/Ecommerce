@@ -99,29 +99,37 @@ export default function SellerProducts() {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = {
-        item_name: form.item_name,
-        item_group: form.item_group || 'Products',
-        standard_rate: parseFloat(form.standard_rate) || 0,
-        description: form.description,
-        website_image: form.website_image,
-        is_sales_item: form.is_sales_item ? 1 : 0,
-      };
       if (editingName) {
+        // Edit: PUT directly on the existing item
         await apiFetch(`/api/resource/Item/${encodeURIComponent(editingName)}`, {
           method: 'PUT',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            item_name: form.item_name,
+            item_group: form.item_group || 'Products',
+            standard_rate: parseFloat(form.standard_rate) || 0,
+            description: form.description,
+            website_image: form.website_image,
+            is_sales_item: form.is_sales_item ? 1 : 0,
+          }),
         });
       } else {
-        await apiFetch('/api/resource/Item', {
+        // Create: use custom endpoint so item_code is auto-generated
+        await apiFetch('/api/method/store_customizations.api.save_seller_product', {
           method: 'POST',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            item_name:   form.item_name,
+            item_group:  form.item_group || 'Products',
+            price:       parseFloat(form.standard_rate) || 0,
+            description: form.description,
+            image:       form.website_image,
+            published:   form.is_sales_item ? 1 : 0,
+          }),
         });
       }
       await loadProducts();
       closeModal();
-    } catch {
-      // handle error silently
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Save failed. Please try again.');
     } finally {
       setSaving(false);
     }

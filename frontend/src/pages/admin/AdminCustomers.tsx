@@ -197,7 +197,7 @@ export default function AdminCustomers() {
                     <td>
                       <button
                         className="admin-btn-edit"
-                        onClick={() => navigate('/admin/orders')}
+                        onClick={() => navigate(`/admin/orders?customer=${encodeURIComponent(c.name)}&customer_name=${encodeURIComponent(c.customer_name)}`)}
                         title="View orders"
                       >
                         Orders

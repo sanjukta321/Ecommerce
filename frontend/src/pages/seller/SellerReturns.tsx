@@ -68,12 +68,24 @@ export default function SellerReturns() {
     return r.status === activeTab.toLowerCase();
   });
 
-  // Optimistic local update — server-side workflow submission requires
-  // Frappe doctype permissions/workflow config; wired up when backend is ready.
-  const handleAction = (id: string, newStatus: 'approved' | 'rejected') => {
-    setReturns(prev =>
-      prev.map(r => r.id === id ? { ...r, status: newStatus } : r)
-    );
+  const handleAction = async (id: string, newStatus: 'approved' | 'rejected') => {
+    // Optimistic update
+    setReturns(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
+    try {
+      await fetch(`${BASE}/api/method/store_customizations.api.handle_return`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''),
+        },
+        body: JSON.stringify({ invoice_name: id, action: newStatus }),
+      });
+    } catch {
+      // Revert on failure
+      setReturns(prev => prev.map(r => r.id === id ? { ...r, status: 'pending' } : r));
+      alert('Failed to update return status. Please try again.');
+    }
   };
 
   const counts = {

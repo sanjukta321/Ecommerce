@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { allProducts } from '../data/allProducts';
 import type { Product } from '../data/allProducts';
 import { useCart } from '../context/CartContext';
@@ -18,6 +18,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
     const [activeIndex, setActiveIndex] = useState(-1);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
     const { cartCount } = useCart();
     const accountDropdownRef = React.useRef<HTMLDivElement>(null);
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -29,6 +30,18 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
     }, [theme]);
+
+    // Sync input with URL when navigating to/from search page
+    useEffect(() => {
+        if (location.pathname === '/search') {
+            const params = new URLSearchParams(location.search);
+            const q = params.get('q') || '';
+            setSearchQuery(q);
+        } else {
+            setSearchQuery('');
+        }
+        setShowSuggestions(false);
+    }, [location.pathname, location.search]);
 
     useEffect(() => {
         if (searchQuery.trim().length > 1) {
@@ -66,12 +79,21 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
         setTheme(prev => (prev === 'light' ? 'dark' : 'light') as 'light' | 'dark');
     };
 
-    const handleSearch = (e: React.FormEvent) => {
+    const handleSearch = (e: React.FormEvent | React.MouseEvent) => {
         e.preventDefault();
-        if (searchQuery.trim()) {
-            navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-            setSearchQuery('');
+        const q = searchQuery.trim();
+        if (q) {
+            navigate(`/search?q=${encodeURIComponent(q)}`);
             setShowSuggestions(false);
+        }
+    };
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSearchQuery(value);
+        // Live search: update results immediately while on the search page
+        if (location.pathname === '/search' && value.trim().length > 1) {
+            navigate(`/search?q=${encodeURIComponent(value.trim())}`, { replace: true });
         }
     };
 
@@ -109,7 +131,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                             type="text"
                             placeholder="Search products (e.g., saree, iphone)..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={handleInputChange}
                             onFocus={() => searchQuery.length > 1 && setShowSuggestions(true)}
                             onKeyDown={handleKeyDown}
                         />
@@ -120,21 +142,23 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
 
                     {showSuggestions && suggestions.length > 0 && (
                         <div className="suggestions-dropdown glass-effect">
-                            {suggestions.map((product: Product, index: number) => (
-                                <div
-                                    key={product.id}
-                                    className={`suggestion-item ${index === activeIndex ? 'active' : ''}`}
-                                    onClick={() => handleSuggestionClick(product)}
-                                >
-                                    <div className="suggestion-image">
-                                        <img src={product.image} alt={product.name} />
+                            <div className="suggestions-list">
+                                {suggestions.map((product: Product, index: number) => (
+                                    <div
+                                        key={product.id}
+                                        className={`suggestion-item ${index === activeIndex ? 'active' : ''}`}
+                                        onClick={() => handleSuggestionClick(product)}
+                                    >
+                                        <div className="suggestion-image">
+                                            <img src={product.image} alt={product.name} />
+                                        </div>
+                                        <div className="suggestion-info">
+                                            <div className="suggestion-name">{product.name}</div>
+                                            <div className="suggestion-category">in {product.category}</div>
+                                        </div>
                                     </div>
-                                    <div className="suggestion-info">
-                                        <div className="suggestion-name">{product.name}</div>
-                                        <div className="suggestion-category">in {product.category}</div>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                             <div className="suggestion-footer" onClick={handleSearch}>
                                 See all results for "{searchQuery}"
                             </div>

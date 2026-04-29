@@ -133,7 +133,7 @@
 .item-details h3 {
     font-size: 16px;
     margin-bottom: 8px;
-    color: white;
+    color: var(--text-main);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

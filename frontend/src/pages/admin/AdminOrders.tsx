@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/admin/AdminLayout';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -55,6 +56,12 @@ function formatDate(dateStr: string) {
 }
 
 export default function AdminOrders() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const customerFilter = searchParams.get('customer') || '';
+  const customerNameLabel = searchParams.get('customer_name') || customerFilter;
+
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
@@ -64,9 +71,11 @@ export default function AdminOrders() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await apiFetch(
-        '/api/resource/Sales%20Order?fields=["name","customer_name","grand_total","status","transaction_date","delivery_date"]&limit=200&order_by=transaction_date desc'
-      );
+      let url = '/api/resource/Sales%20Order?fields=["name","customer","customer_name","grand_total","status","transaction_date","delivery_date"]&limit=200&order_by=transaction_date desc';
+      if (customerFilter) {
+        url += `&filters=[["customer","=","${customerFilter}"]]`;
+      }
+      const res = await apiFetch(url);
       const data = await res.json();
       setOrders(data.data || []);
     } catch {
@@ -76,13 +85,12 @@ export default function AdminOrders() {
     }
   };
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => { fetchOrders(); }, [customerFilter]);
 
   const filtered = activeTab === 'all'
     ? orders
     : orders.filter(o => statusKey(o.status) === activeTab);
 
-  // Stat counts
   const total = orders.length;
   const pending = orders.filter(o => statusKey(o.status) === 'pending').length;
   const shipped = orders.filter(o => statusKey(o.status) === 'shipped').length;
@@ -109,8 +117,38 @@ export default function AdminOrders() {
 
   const skeletonRows = Array.from({ length: 7 });
 
+  const subtitle = customerFilter
+    ? `Orders for: ${customerNameLabel}`
+    : 'All customer orders';
+
   return (
-    <AdminLayout title="Orders" subtitle="All customer orders">
+    <AdminLayout title="Orders" subtitle={subtitle}>
+
+      {/* Customer filter banner */}
+      {customerFilter && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)',
+          borderRadius: 8, padding: '10px 16px', marginBottom: 20,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>
+            Showing orders for: {customerNameLabel}
+          </span>
+          <button
+            onClick={() => navigate('/admin/orders')}
+            style={{
+              marginLeft: 'auto', fontSize: 12, color: '#6b7280',
+              background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline',
+            }}
+          >
+            View all orders
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
@@ -165,7 +203,9 @@ export default function AdminOrders() {
       <div className="admin-section">
         <div className="admin-section-header">
           <div>
-            <h2 className="admin-section-title">Order List</h2>
+            <h2 className="admin-section-title">
+              {customerFilter ? `${customerNameLabel}'s Orders` : 'Order List'}
+            </h2>
             <p className="admin-section-subtitle">
               {loading ? '...' : `${filtered.length} order${filtered.length !== 1 ? 's' : ''}`}
             </p>
@@ -230,7 +270,11 @@ export default function AdminOrders() {
                         <path d="M16 10a4 4 0 0 1-8 0"/>
                       </svg>
                       <h3>No orders found</h3>
-                      <p>{activeTab !== 'all' ? `No ${activeTab} orders at the moment.` : 'No orders have been placed yet.'}</p>
+                      <p>
+                        {customerFilter
+                          ? `${customerNameLabel} has no${activeTab !== 'all' ? ` ${activeTab}` : ''} orders.`
+                          : activeTab !== 'all' ? `No ${activeTab} orders at the moment.` : 'No orders have been placed yet.'}
+                      </p>
                     </div>
                   </td>
                 </tr>

@@ -1,7 +1,7 @@
 """
 Controller for the React SPA entry point.
 
-Frappe serves this at / (configured via home_page = "index" in hooks.py).
+Frappe serves this at / (configured via home_page = "shop" in hooks.py).
 All React Router paths are redirected here via website_route_rules in hooks.py.
 """
 
@@ -24,9 +24,12 @@ def get_context(context):
     except Exception:
         context.asset_version = 1
 
-    # Inject the session CSRF token so React can send it with POST requests.
-    # Without this, Frappe v15 throws CSRFTokenError on every guest POST.
+    # Ensure the CSRF token is generated for this session.
+    # frappe.sessions.get_csrf_token() generates one if not already set,
+    # then the <!-- csrf_token --> placeholder in shop.html is replaced by
+    # Frappe's base_template_page with <script>frappe.csrf_token = "...";</script>
     try:
-        context.csrf_token = frappe.local.session.data.csrf_token
+        import frappe.sessions as _sessions
+        _sessions.get_csrf_token()
     except Exception:
-        context.csrf_token = ""
+        pass

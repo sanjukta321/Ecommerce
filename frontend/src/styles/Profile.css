@@ -90,7 +90,7 @@
 }
 
 .group-header:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--hover-bg);
 }
 
 .group-links {
@@ -110,13 +110,13 @@
 
 .group-links li:hover {
     color: var(--accent);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--hover-bg);
     padding-left: 60px;
     opacity: 1;
 }
 
 .group-links li.active {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--hover-bg);
     color: var(--accent);
     font-weight: 600;
     opacity: 1;
@@ -199,13 +199,24 @@
 .input-group input {
     width: 100%;
     padding: 14px 18px;
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--input-border);
     border-radius: 8px;
     font-size: 15px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--input-bg);
     color: var(--text-main);
-    cursor: not-allowed;
     transition: var(--transition);
+    outline: none;
+}
+
+.input-group input:disabled {
+    cursor: not-allowed;
+    color: var(--text-dim);
+    -webkit-text-fill-color: var(--text-dim);
+    opacity: 1;
+}
+
+.input-group input:not(:disabled):focus {
+    border-color: var(--accent);
 }
 
 .full-width {

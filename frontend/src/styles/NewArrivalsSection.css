@@ -297,7 +297,7 @@
 }
 
 .view-details-btn {
-    background: #FFFFFF !important;
+    background: var(--glass) !important;
     border: 1px solid var(--accent) !important;
     color: var(--accent) !important;
     padding: 10px 5px !important;
@@ -314,8 +314,8 @@
 }
 
 .view-details-btn:hover {
-    background: var(--accent);
-    color: #FFFFFF;
+    background: var(--accent) !important;
+    color: var(--bg-main) !important;
 }
 
 @media (max-width: 768px) {

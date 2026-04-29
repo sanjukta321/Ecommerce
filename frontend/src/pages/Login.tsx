@@ -61,6 +61,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     // Signup steps: 1 = enter email  2 = enter details  3 = verify OTP
     const [signupStep, setSignupStep] = useState(1);
 
+    // Forgot-password flow
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
+    // forgotStep: 1 = enter email/mobile  2 = enter OTP + new password
+    const [forgotStep, setForgotStep] = useState(1);
+    const [forgotContact, setForgotContact] = useState('');
+    const [forgotOtp, setForgotOtp]         = useState('');
+    const [newPassword, setNewPassword]     = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+
     useEffect(() => {
         if (location.state && (location.state as any).startSignup) {
             setIsSignup(true);
@@ -142,6 +151,55 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         }
     };
 
+    // ── Forgot password flow ──────────────────────────────────────────
+
+    /** Step 1 → send OTP to registered email/mobile */
+    const handleForgotSendOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!forgotContact.trim()) { setError('Please enter your email or mobile number.'); return; }
+        setLoading(true);
+        setError('');
+        try {
+            await apiPost(
+                '/api/method/store_customizations.api.send_forgot_password_otp',
+                { contact: forgotContact.trim() }
+            );
+            setForgotStep(2);
+        } catch (err: any) {
+            setError(err.message || 'Failed to send OTP. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /** Step 2 → verify OTP and reset password */
+    const handleForgotReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!forgotOtp.trim())    { setError('Please enter the OTP.'); return; }
+        if (newPassword.length < 8) { setError('Password must be at least 8 characters.'); return; }
+        if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return; }
+        setLoading(true);
+        setError('');
+        try {
+            await apiPost(
+                '/api/method/store_customizations.api.reset_password_with_otp',
+                { contact: forgotContact.trim(), otp: forgotOtp.trim(), new_password: newPassword }
+            );
+            // Success — return to login with confirmation
+            setIsForgotPassword(false);
+            setForgotStep(1);
+            setForgotContact('');
+            setForgotOtp('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setError('Password reset successfully! Please login with your new password.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to reset password. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // ── Login flow ────────────────────────────────────────────────────
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -186,6 +244,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             const msg = err.message || '';
             if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
                 setError('Backend unreachable. Please ensure the Frappe server is running.');
+            } else if (msg.includes('AuthenticationError') || (err as any).status === 401) {
+                setError('Invalid email or password. Please check your credentials.');
             } else {
                 setError(msg || 'Login failed. Please check your credentials.');
             }
@@ -197,6 +257,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     // ── Master submit dispatcher ──────────────────────────────────────
 
     const handleSubmit = (e: React.FormEvent) => {
+        if (isForgotPassword)   return forgotStep === 1 ? handleForgotSendOtp(e) : handleForgotReset(e);
         if (!isSignup)          return handleLogin(e);
         if (signupStep === 1)   return handleSendOtp(e);
         if (signupStep === 2)   return handleDetailsNext(e);
@@ -205,6 +266,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     const switchMode = () => {
         setIsSignup(!isSignup);
+        setIsForgotPassword(false);
+        setForgotStep(1);
+        setForgotContact('');
+        setForgotOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
         setSignupStep(1);
         setError('');
         setOtp('');
@@ -212,11 +279,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // ── Render ────────────────────────────────────────────────────────
 
-    const stepTitle = isSignup
+    const stepTitle = isForgotPassword
+        ? (forgotStep === 1 ? 'Forgot Password' : 'Reset Password')
+        : isSignup
         ? (signupStep === 1 ? 'Sign Up' : signupStep === 2 ? 'Your Details' : 'Verify OTP')
         : 'Login';
 
-    const stepSubtitle = isSignup
+    const stepSubtitle = isForgotPassword
+        ? (forgotStep === 1
+            ? 'Enter your registered email or mobile number'
+            : `Enter the OTP sent to ${forgotContact} and your new password`)
+        : isSignup
         ? (signupStep === 1
             ? 'Enter your email to get started'
             : signupStep === 2
@@ -236,6 +309,57 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
                 <div className="login-right">
                     <form onSubmit={handleSubmit} className="login-form">
+
+                        {/* ── Forgot Password Step 1: Email / Mobile ── */}
+                        {isForgotPassword && forgotStep === 1 && (
+                            <div className="input-field">
+                                <input
+                                    type="text"
+                                    required
+                                    value={forgotContact}
+                                    onChange={e => setForgotContact(e.target.value)}
+                                />
+                                <label>Email or Mobile Number</label>
+                            </div>
+                        )}
+
+                        {/* ── Forgot Password Step 2: OTP + New Password ── */}
+                        {isForgotPassword && forgotStep === 2 && (
+                            <>
+                                <div className="input-field">
+                                    <input
+                                        type="text"
+                                        required
+                                        maxLength={6}
+                                        value={forgotOtp}
+                                        onChange={e => setForgotOtp(e.target.value.replace(/\D/g, ''))}
+                                        placeholder="000000"
+                                        className="otp-input"
+                                    />
+                                    <label>OTP</label>
+                                </div>
+                                <div className="input-field">
+                                    <input
+                                        type="password"
+                                        required
+                                        minLength={8}
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                    />
+                                    <label>New Password (min 8 chars)</label>
+                                </div>
+                                <div className="input-field">
+                                    <input
+                                        type="password"
+                                        required
+                                        minLength={8}
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                    />
+                                    <label>Confirm New Password</label>
+                                </div>
+                            </>
+                        )}
 
                         {/* ── Signup Step 1: Email ── */}
                         {isSignup && signupStep === 1 && (
@@ -301,7 +425,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         )}
 
                         {/* ── Login: Email + Password ── */}
-                        {!isSignup && (
+                        {!isSignup && !isForgotPassword && (
                             <>
                                 <div className="input-field">
                                     <input
@@ -310,7 +434,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                                         value={email}
                                         onChange={e => setEmail(e.target.value)}
                                     />
-                                    <label>Email / Username</label>
+                                    <label>Email / Mobile</label>
                                 </div>
                                 <div className="input-field">
                                     <input
@@ -320,6 +444,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                                         onChange={e => setPassword(e.target.value)}
                                     />
                                     <label>Password</label>
+                                </div>
+                                <div style={{ textAlign: 'right', marginTop: '-8px', marginBottom: '8px' }}>
+                                    <span
+                                        className="link"
+                                        style={{ cursor: 'pointer', fontSize: '13px', color: '#ff3f6c' }}
+                                        onClick={() => { setIsForgotPassword(true); setForgotStep(1); setError(''); }}
+                                    >
+                                        Forgot Password?
+                                    </span>
                                 </div>
                             </>
                         )}
@@ -347,6 +480,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         <button type="submit" className="login-button" disabled={loading}>
                             {loading
                                 ? 'Please wait...'
+                                : isForgotPassword
+                                ? (forgotStep === 1 ? 'Send OTP' : 'Reset Password')
                                 : !isSignup
                                 ? 'Sign In'
                                 : signupStep === 1
@@ -356,7 +491,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                                 : 'Create Account'}
                         </button>
 
-                        {isSignup && signupStep > 1 && (
+                        {isForgotPassword && (
+                            <span
+                                className="step-back-link"
+                                onClick={() => {
+                                    if (forgotStep === 2) { setForgotStep(1); setError(''); }
+                                    else { setIsForgotPassword(false); setError(''); }
+                                }}
+                            >
+                                ← Go Back
+                            </span>
+                        )}
+
+                        {!isForgotPassword && isSignup && signupStep > 1 && (
                             <span
                                 className="step-back-link"
                                 onClick={() => { setSignupStep(signupStep - 1); setError(''); }}
@@ -367,16 +514,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </form>
 
                     <div className="login-footer">
-                        <p className="new-user" style={{ color: '#212121' }}>
-                            {isSignup ? 'Already have an account?' : 'New customer?'}
-                            <span
-                                className="link"
-                                style={{ cursor: 'pointer', marginLeft: 8, fontWeight: 800, color: '#ff3f6c', textDecoration: 'underline' }}
-                                onClick={switchMode}
-                            >
-                                {isSignup ? 'Login' : 'Sign Up'}
-                            </span>
-                        </p>
+                        {!isForgotPassword && (
+                            <p className="new-user" style={{ color: '#212121' }}>
+                                {isSignup ? 'Already have an account?' : 'New customer?'}
+                                <span
+                                    className="link"
+                                    style={{ cursor: 'pointer', marginLeft: 8, fontWeight: 800, color: '#ff3f6c', textDecoration: 'underline' }}
+                                    onClick={switchMode}
+                                >
+                                    {isSignup ? 'Login' : 'Sign Up'}
+                                </span>
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>

@@ -79,19 +79,19 @@
 }
 
 .view-btn {
-    background: #FFFFFF;
+    background: var(--glass);
     border: 1px solid var(--accent);
     color: var(--accent);
 }
 
 .view-btn:hover {
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--bg-main);
 }
 
 .cart-btn {
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--bg-main);
 }
 
 .action-btn:hover {
