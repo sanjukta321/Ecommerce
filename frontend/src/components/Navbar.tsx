@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { allProducts } from '../data/allProducts';
 import type { Product } from '../data/allProducts';
+import { frappeApi } from '../api/frappe';
+import { mapToProduct } from '../hooks/useFrappeProducts';
 import { useCart } from '../context/CartContext';
 import '../styles/Navbar.css';
 
@@ -43,21 +45,68 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
         setShowSuggestions(false);
     }, [location.pathname, location.search]);
 
+    // Cache of Frappe products so we only fetch once per session
+    const frappeCache = useRef<Product[]>([]);
+
     useEffect(() => {
-        if (searchQuery.trim().length > 1) {
-            const query = searchQuery.toLowerCase().trim();
-            const filtered = allProducts.filter(p =>
-                p.name.toLowerCase().includes(query) ||
-                p.category.toLowerCase().includes(query) ||
-                p.tags?.some(t => t.toLowerCase().includes(query))
-            ).slice(0, 8); // Limit to top 8 suggestions
-            setSuggestions(filtered);
-            setShowSuggestions(true);
-        } else {
+        const q = searchQuery.trim();
+        if (q.length < 2) {
             setSuggestions([]);
             setShowSuggestions(false);
+            setActiveIndex(-1);
+            return;
         }
+
+        const query = q.toLowerCase();
+        const tokens = query.split(/\s+/).filter(t => t.length >= 2);
+
+        function matches(p: Product): boolean {
+            const fields = [
+                p.name,
+                p.category,
+                p.gender ?? '',
+                ...(p.tags ?? []),
+            ].join(' ').toLowerCase();
+            // Every token must appear somewhere in the fields
+            return tokens.every(token => fields.includes(token));
+        }
+
+        // Immediate: search static products
+        const staticHits = allProducts.filter(matches);
+
+        // Merge with cached Frappe results
+        const frappe = frappeCache.current;
+        const frappeIds = new Set(frappe.map(p => p.id));
+        const merged = [
+            ...frappe.filter(matches),
+            ...staticHits.filter(p => !frappeIds.has(p.id)),
+        ].slice(0, 8);
+
+        setSuggestions(merged);
+        setShowSuggestions(merged.length > 0);
         setActiveIndex(-1);
+
+        // Debounced Frappe fetch (only if cache is empty)
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            if (cancelled || frappeCache.current.length > 0) return;
+            try {
+                const res = await frappeApi.getProducts();
+                if (!cancelled && res.data?.length) {
+                    frappeCache.current = res.data.map(mapToProduct);
+                    const updatedFrappe = frappeCache.current;
+                    const updatedIds = new Set(updatedFrappe.map(p => p.id));
+                    const updatedMerged = [
+                        ...updatedFrappe.filter(matches),
+                        ...staticHits.filter(p => !updatedIds.has(p.id)),
+                    ].slice(0, 8);
+                    setSuggestions(updatedMerged);
+                    setShowSuggestions(updatedMerged.length > 0);
+                }
+            } catch {}
+        }, 350);
+
+        return () => { cancelled = true; clearTimeout(timer); };
     }, [searchQuery]);
 
     // Handle click outside to close suggestions and account dropdown
@@ -118,13 +167,57 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
         }
     };
 
+    const close = () => setIsMenuOpen(false);
+
+    const MegaMenuContent = () => (
+        <div className="mega-menu glass-effect">
+            <div className="mega-grid">
+                <div className="mega-col">
+                    <h3>Electronics</h3>
+                    <ul>
+                        <li><Link to="/electronics" onClick={close}>All Electronics</Link></li>
+                        <li><Link to="/electronics" onClick={close}>Mobiles</Link></li>
+                        <li><Link to="/electronics" onClick={close}>Laptops</Link></li>
+                    </ul>
+                </div>
+                <div className="mega-col">
+                    <h3>Fashion</h3>
+                    <ul>
+                        <li><Link to="/fashion/men" onClick={close}>Men's Wear</Link></li>
+                        <li><Link to="/fashion/women" onClick={close}>Women's Wear</Link></li>
+                        <li><Link to="/fashion/kids" onClick={close}>Kids' Wear</Link></li>
+                    </ul>
+                </div>
+                <div className="mega-col">
+                    <h3>Home & Life</h3>
+                    <ul>
+                        <li><Link to="/furniture" onClick={close}>Furniture</Link></li>
+                        <li><Link to="/books" onClick={close}>Books & Media</Link></li>
+                        <li><Link to="/sports" onClick={close}>Sports & Fitness</Link></li>
+                        <li><Link to="/accessories" onClick={close}>Accessories</Link></li>
+                    </ul>
+                </div>
+                <div className="mega-col">
+                    <h3>Offers</h3>
+                    <ul>
+                        <li><Link to="/offers" onClick={close}>Flash Sale</Link></li>
+                        <li><Link to="/new-arrivals" onClick={close}>New Arrivals</Link></li>
+                        <li><Link to="/offers" onClick={close}>Clearance Sale</Link></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    );
+
     return (
+    <>
         <nav className="navbar">
             <div className="nav-content">
                 <div className="logo">
                     <Link to="/"><h1>SB<span>Store</span></h1></Link>
                 </div>
 
+                {/* Desktop search */}
                 <div className="search-bar-container">
                     <form className="search-bar" onSubmit={handleSearch}>
                         <input
@@ -166,47 +259,12 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                     )}
                 </div>
 
-                <ul className={`nav-links ${isMenuOpen ? 'active' : ''}`}>
+                {/* Desktop nav links */}
+                <ul className="nav-links">
                     <li><Link to="/">Home</Link></li>
                     <li className="mega-menu-trigger">
-                        <Link to="#">Shop</Link>
-                        <div className="mega-menu glass-effect">
-                            <div className="mega-grid">
-                                <div className="mega-col">
-                                    <h3>Electronics</h3>
-                                    <ul>
-                                        <li><Link to="/electronics">All Electronics</Link></li>
-                                        <li><Link to="/electronics">Mobiles</Link></li>
-                                        <li><Link to="/electronics">Laptops</Link></li>
-                                    </ul>
-                                </div>
-                                <div className="mega-col">
-                                    <h3>Fashion</h3>
-                                    <ul>
-                                        <li><Link to="/fashion/men">Men's Wear</Link></li>
-                                        <li><Link to="/fashion/women">Women's Wear</Link></li>
-                                        <li><Link to="/fashion/kids">Kids' Wear</Link></li>
-                                    </ul>
-                                </div>
-                                <div className="mega-col">
-                                    <h3>Home & Life</h3>
-                                    <ul>
-                                        <li><Link to="/furniture">Furniture</Link></li>
-                                        <li><Link to="/books">Books & Media</Link></li>
-                                        <li><Link to="/sports">Sports & Fitness</Link></li>
-                                        <li><Link to="/accessories">Accessories</Link></li>
-                                    </ul>
-                                </div>
-                                <div className="mega-col">
-                                    <h3>Offers</h3>
-                                    <ul>
-                                        <li><Link to="/offers">Flash Sale</Link></li>
-                                        <li><Link to="/new-arrivals">New Arrivals</Link></li>
-                                        <li><Link to="/offers">Clearance Sale</Link></li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
+                        <Link to="#" onClick={e => e.preventDefault()}>Shop ▾</Link>
+                        <MegaMenuContent />
                     </li>
                     <li><Link to="/offers">Offers</Link></li>
                     <li><Link to="/new-arrivals">New Arrivals</Link></li>
@@ -367,7 +425,51 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                     </button>
                 </div>
             </div>
+
         </nav>
+
+        {/* Mobile menu — outside <nav> so backdrop-filter doesn't trap fixed positioning */}
+        {isMenuOpen && (
+            <div className="mobile-menu-overlay">
+                <div className="mobile-menu-search">
+                    <form className="search-bar" style={{ width: '100%' }} onSubmit={(e) => { handleSearch(e); close(); }}>
+                        <input
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchQuery}
+                            onChange={handleInputChange}
+                        />
+                        <button type="submit">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                        </button>
+                    </form>
+                </div>
+
+                <ul className="mobile-nav-list">
+                    <li><Link to="/" onClick={close}>Home</Link></li>
+
+                    <li className="mobile-section-label">Shop</li>
+                    <li className="mobile-sub"><Link to="/electronics" onClick={close}>Electronics</Link></li>
+                    <li className="mobile-sub"><Link to="/fashion/men" onClick={close}>Men's Fashion</Link></li>
+                    <li className="mobile-sub"><Link to="/fashion/women" onClick={close}>Women's Fashion</Link></li>
+                    <li className="mobile-sub"><Link to="/fashion/kids" onClick={close}>Kids' Fashion</Link></li>
+                    <li className="mobile-sub"><Link to="/furniture" onClick={close}>Furniture</Link></li>
+                    <li className="mobile-sub"><Link to="/books" onClick={close}>Books & Media</Link></li>
+                    <li className="mobile-sub"><Link to="/sports" onClick={close}>Sports & Fitness</Link></li>
+                    <li className="mobile-sub"><Link to="/accessories" onClick={close}>Accessories</Link></li>
+
+                    <li><Link to="/offers" onClick={close}>Offers</Link></li>
+                    <li><Link to="/new-arrivals" onClick={close}>New Arrivals</Link></li>
+                    <li><Link to="/contact" onClick={close}>Contact Us</Link></li>
+                    <li>
+                        <Link to="/become-seller" onClick={close} style={{ color: 'var(--accent)', fontWeight: 800 }}>
+                            Sell on SB Store
+                        </Link>
+                    </li>
+                </ul>
+            </div>
+        )}
+    </>
     );
 };
 

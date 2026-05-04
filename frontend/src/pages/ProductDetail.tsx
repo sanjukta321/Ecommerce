@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { allProducts } from '../data/allProducts';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useToast } from '../context/ToastContext';
 import Footer from '../components/Footer';
 import '../styles/ProductDetail.css';
 
@@ -16,6 +17,19 @@ interface FrappeItem {
     selling_price: number;
     image?: string;
     description?: string;
+    has_variants?: number;
+}
+
+interface VariantItem {
+    item_code: string;
+    price: number;
+    image?: string;
+    [attr: string]: any;
+}
+
+interface VariantData {
+    attributes: { attribute: string; values: string[] }[];
+    variants: VariantItem[];
 }
 
 interface DisplayProduct {
@@ -35,6 +49,18 @@ interface DisplayProduct {
 }
 
 const PLACEHOLDER = 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&q=80&w=1000';
+
+const COLOUR_MAP: Record<string, string> = {
+    red: '#e53e3e', blue: '#3182ce', green: '#38a169', black: '#1a202c',
+    white: '#ffffff', yellow: '#d69e2e', pink: '#d53f8c', purple: '#805ad5',
+    orange: '#dd6b20', brown: '#744210', grey: '#718096', gray: '#718096',
+    navy: '#1a365d', maroon: '#702459', teal: '#2c7a7b', cyan: '#0987a0',
+    beige: '#d4b896', cream: '#fffdd0', khaki: '#c3b091', olive: '#6b7c3b',
+};
+
+function cssColour(name: string): string {
+    return COLOUR_MAP[name.toLowerCase()] ?? name.toLowerCase();
+}
 
 function buildDisplayFromFrappe(item: FrappeItem): DisplayProduct {
     const rate = item.selling_price || item.standard_rate || 0;
@@ -111,6 +137,7 @@ const ProductDetail: React.FC = () => {
     const navigate = useNavigate();
     const { addToCart } = useCart();
     const { toggleWishlist, isWishlisted } = useWishlist();
+    const { showToast } = useToast();
     const [selectedSize, setSelectedSize] = useState('M');
     const [quantity, setQuantity] = useState(1);
     const [activeImage, setActiveImage] = useState(0);
@@ -120,43 +147,101 @@ const ProductDetail: React.FC = () => {
     const [product, setProduct] = useState<DisplayProduct | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Variant state
+    const [isTemplate, setIsTemplate] = useState(false);
+    const [variantData, setVariantData] = useState<VariantData | null>(null);
+    const [selectedColour, setSelectedColour] = useState('');
+    const [selectedVariantSize, setSelectedVariantSize] = useState('');
+
+    const csrfToken = () =>
+        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch';
+
     useEffect(() => {
         window.scrollTo(0, 0);
         setLoading(true);
         setActiveImage(0);
+        setIsTemplate(false);
+        setVariantData(null);
+        setSelectedColour('');
+        setSelectedVariantSize('');
 
         if (!id) {
             setLoading(false);
             return;
         }
 
-        // Try backend first
         fetch(
             `${BASE}/api/method/store_customizations.api.get_product?item_code=${encodeURIComponent(id)}`,
-            {
-                credentials: 'include',
-                headers: {
-                    'X-Frappe-CSRF-Token':
-                        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch',
-                },
-            }
+            { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
         )
             .then(r => r.json())
-            .then(data => {
+            .then(async data => {
                 const item: FrappeItem | undefined = data.message;
                 if (item && item.name) {
                     setProduct(buildDisplayFromFrappe(item));
+                    if (item.has_variants) {
+                        setIsTemplate(true);
+                        try {
+                            const vRes = await fetch(
+                                `${BASE}/api/method/store_customizations.api.get_item_variants?item_code=${encodeURIComponent(item.name)}`,
+                                { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
+                            );
+                            const vJson = await vRes.json();
+                            if (vJson.message) setVariantData(vJson.message);
+                        } catch {}
+                    }
                 } else {
                     throw new Error('not found in backend');
                 }
             })
             .catch(() => {
-                // Fallback: look up in static allProducts
                 const staticItem = allProducts.find(p => p.id === id);
                 setProduct(staticItem ? buildDisplayFromStatic(staticItem) : null);
             })
             .finally(() => setLoading(false));
     }, [id]);
+
+    // Derive active variant
+    // Detect actual attribute names from Frappe (avoids hardcoding 'Colour'/'Size')
+    const colourAttrName = variantData?.attributes.find(
+        a => /colou?r/i.test(a.attribute)
+    )?.attribute ?? variantData?.attributes[0]?.attribute ?? 'Colour';
+
+    const sizeAttrName = variantData?.attributes.find(
+        a => /size/i.test(a.attribute)
+    )?.attribute ?? variantData?.attributes[1]?.attribute ?? 'Size';
+
+    const activeVariant: VariantItem | null = isTemplate && variantData
+        ? (variantData.variants.find(
+            v => v[colourAttrName] === selectedColour && v[sizeAttrName] === selectedVariantSize
+          ) ?? null)
+        : null;
+
+    // Sizes available for the selected colour
+    const availableSizes: string[] = isTemplate && variantData && selectedColour
+        ? variantData.variants
+            .filter(v => v[colourAttrName] === selectedColour)
+            .map(v => v[sizeAttrName])
+            .filter(Boolean)
+        : (variantData?.attributes.find(a => a.attribute === sizeAttrName)?.values ?? []);
+
+    const colours: string[] = variantData?.attributes.find(a => a.attribute === colourAttrName)?.values ?? [];
+
+    // Resolved display image and price
+    const displayImage = (() => {
+        if (activeVariant?.image) {
+            const img = activeVariant.image;
+            return img.startsWith('http') ? img : BASE + img;
+        }
+        return product?.image ?? PLACEHOLDER;
+    })();
+
+    const displayPrice = activeVariant
+        ? `₹${Number(activeVariant.price).toLocaleString('en-IN')}`
+        : product?.price ?? '';
+
+    const numericPrice = parseInt(displayPrice.replace(/[^\d]/g, ''), 10) || 0;
+    const cartItemId = activeVariant ? activeVariant.item_code : (product?.id ?? '');
 
     if (loading) {
         return (
@@ -186,7 +271,7 @@ const ProductDetail: React.FC = () => {
         );
     }
 
-    const numericPrice = parseInt(product.price.replace(/[^\d]/g, ''), 10) || 0;
+    const canAddToCart = !isTemplate || activeVariant !== null;
 
     return (
         <div className="product-detail-page">
@@ -195,7 +280,7 @@ const ProductDetail: React.FC = () => {
                     {/* Image Gallery */}
                     <div className="image-gallery">
                         <div className="main-image">
-                            <img src={product.images[activeImage]} alt={product.name} />
+                            <img src={displayImage} alt={product.name} />
                         </div>
                         {product.images.length > 1 && (
                             <div className="thumbnail-strip">
@@ -226,7 +311,7 @@ const ProductDetail: React.FC = () => {
                         </div>
 
                         <div className="price-section">
-                            <span className="current-price">{product.price}</span>
+                            <span className="current-price">{displayPrice}</span>
                             <span className="original-price">{product.originalPrice}</span>
                             <span className="discount">20% OFF</span>
                         </div>
@@ -240,8 +325,60 @@ const ProductDetail: React.FC = () => {
                             </ul>
                         </div>
 
-                        {/* Size Selection */}
-                        {(product.category === 'Fashion' || product.category === 'Furniture' || product.category === 'Accessories') && (
+                        {/* Variant Selector (template items) */}
+                        {isTemplate && variantData && (
+                            <div className="variant-selector">
+                                {colours.length > 0 && (
+                                    <div className="variant-attribute">
+                                        <h3>
+                                            Colour{selectedColour ? `: ${selectedColour}` : ''}
+                                        </h3>
+                                        <div className="colour-swatches">
+                                            {colours.map(colour => (
+                                                <button
+                                                    key={colour}
+                                                    className={`colour-swatch ${selectedColour === colour ? 'active' : ''}`}
+                                                    style={{ background: cssColour(colour) }}
+                                                    title={colour}
+                                                    onClick={() => {
+                                                        setSelectedColour(colour);
+                                                        setSelectedVariantSize('');
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {availableSizes.length > 0 && (
+                                    <div className="variant-attribute">
+                                        <h3>Size</h3>
+                                        <div className="size-options">
+                                            {availableSizes.map(size => (
+                                                <button
+                                                    key={size}
+                                                    className={`size-btn ${selectedVariantSize === size ? 'active' : ''}`}
+                                                    onClick={() => setSelectedVariantSize(size)}
+                                                >
+                                                    {size}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {isTemplate && !activeVariant && (selectedColour || selectedVariantSize) && (
+                                    <p className="variant-hint">
+                                        {!selectedColour
+                                            ? 'Please select a colour'
+                                            : 'Please select a size'}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Static Size Selection (non-template Frappe / static items) */}
+                        {!isTemplate && (product.category === 'Fashion' || product.category === 'Furniture' || product.category === 'Accessories') && (
                             <div className="size-selection">
                                 <h3>
                                     {product.category === 'Furniture' ? 'Select Configuration' :
@@ -285,18 +422,49 @@ const ProductDetail: React.FC = () => {
 
                         {/* Action Buttons */}
                         <div className="action-buttons">
-                            <button className="premium-btn add-to-cart" onClick={() => {
-                                addToCart({ id: product.id, name: product.name, price: numericPrice, image: product.image, size: selectedSize, quantity });
-                                setAddedToCart(true);
-                                setTimeout(() => setAddedToCart(false), 2000);
-                            }}>
+                            <button
+                                className="premium-btn add-to-cart"
+                                disabled={!canAddToCart}
+                                style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                onClick={() => {
+                                    if (!canAddToCart) return;
+                                    addToCart({
+                                        id: cartItemId,
+                                        name: activeVariant
+                                            ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
+                                            : product.name,
+                                        price: numericPrice,
+                                        image: displayImage,
+                                        size: isTemplate ? selectedVariantSize : selectedSize,
+                                        quantity,
+                                    });
+                                    showToast(`${product.name} added to cart!`, 'success');
+                                    setAddedToCart(true);
+                                    setTimeout(() => setAddedToCart(false), 2000);
+                                }}
+                            >
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
                                 {addedToCart ? '✓ Added!' : 'Add to Cart'}
                             </button>
-                            <button className="premium-btn buy-now-btn" onClick={() => {
-                                addToCart({ id: product.id, name: product.name, price: numericPrice, image: product.image, size: selectedSize, quantity });
-                                navigate('/cart');
-                            }}>
+                            <button
+                                className="premium-btn buy-now-btn"
+                                disabled={!canAddToCart}
+                                style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                onClick={() => {
+                                    if (!canAddToCart) return;
+                                    addToCart({
+                                        id: cartItemId,
+                                        name: activeVariant
+                                            ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
+                                            : product.name,
+                                        price: numericPrice,
+                                        image: displayImage,
+                                        size: isTemplate ? selectedVariantSize : selectedSize,
+                                        quantity,
+                                    });
+                                    navigate('/cart');
+                                }}
+                            >
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
                                 Buy Now
                             </button>

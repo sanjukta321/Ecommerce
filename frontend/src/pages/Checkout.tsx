@@ -7,13 +7,10 @@ import '../styles/Checkout.css';
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function getCsrfToken(): Promise<string> {
-    // Frappe injects the real token via window.frappe.csrf_token on every page load
     const frappeToken = (window as any).frappe?.csrf_token;
     if (frappeToken && frappeToken !== 'None') return frappeToken;
-    // Meta tag fallback
     const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     if (metaToken && metaToken !== 'None') return metaToken;
-    // Last resort: fetch from API
     try {
         const res = await fetch(`${BASE}/api/method/store_customizations.api.get_csrf_token`, { credentials: 'include' });
         const d = await res.json();
@@ -25,6 +22,17 @@ async function getCsrfToken(): Promise<string> {
 
 type CheckoutStep = 'mobile' | 'address' | 'payment' | 'success';
 
+interface SavedAddress {
+    name: string;
+    address_title: string;
+    address_line1: string;
+    address_line2: string;
+    city: string;
+    state: string;
+    pincode: string;
+    country: string;
+}
+
 const Checkout: React.FC = () => {
     const navigate = useNavigate();
     const { cart, cartTotal, clearCart } = useCart();
@@ -35,8 +43,15 @@ const Checkout: React.FC = () => {
     const [otp, setOtp] = useState('');
     const [showOtpInput, setShowOtpInput] = useState(false);
     const [mobileVerified, setMobileVerified] = useState(false);
+    const [otpError, setOtpError] = useState('');
+    const [otpSending, setOtpSending] = useState(false);
+    const [otpVerifying, setOtpVerifying] = useState(false);
 
     // Step 2: Address
+    const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+    const [selectedSavedAddress, setSelectedSavedAddress] = useState<SavedAddress | null>(null);
+    const [showAddressPanel, setShowAddressPanel] = useState(false);
+    const [showNewAddressForm, setShowNewAddressForm] = useState(false);
     const [address, setAddress] = useState({
         fullName: '',
         pincode: '',
@@ -51,7 +66,7 @@ const Checkout: React.FC = () => {
     const [placing, setPlacing] = useState(false);
     const [orderError, setOrderError] = useState('');
 
-    // Step 4: Success data
+    // Step 4: Success
     const [orderId, setOrderId] = useState('');
     const [invoiceId, setInvoiceId] = useState('');
 
@@ -63,24 +78,114 @@ const Checkout: React.FC = () => {
     const deliveryFee = cartTotal > 500 ? 0 : 99;
     const orderTotal = cartTotal + deliveryFee;
 
-    // ── Handlers ──────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────
 
-    const handleSendOtp = () => {
-        if (mobile.length !== 10) {
-            alert('Please enter a valid 10-digit mobile number');
-            return;
-        }
-        setShowOtpInput(true);
-        alert('Mock OTP sent to ' + mobile + ': 1234');
+    const applyAddress = (addr: SavedAddress) => {
+        setSelectedSavedAddress(addr);
+        setAddress({
+            fullName: addr.address_title,
+            pincode: addr.pincode,
+            addressLine: addr.address_line1,
+            city: addr.city,
+            state: addr.state,
+            landmark: addr.address_line2,
+        });
+        setShowNewAddressForm(false);
+        setShowAddressPanel(false);
     };
 
-    const handleVerifyOtp = () => {
-        if (otp === '1234') {
-            setMobileVerified(true);
-            setStep('address');
-        } else {
-            alert('Invalid OTP. Use 1234 for testing.');
+    const formatAddress = (addr: SavedAddress) =>
+        [addr.address_line1, addr.address_line2, addr.city, addr.state, addr.pincode]
+            .filter(Boolean)
+            .join(', ');
+
+    // ── Handlers ──────────────────────────────────────────────────────
+
+    const handleSendOtp = async () => {
+        if (mobile.length !== 10) {
+            setOtpError('Please enter a valid 10-digit mobile number');
+            return;
         }
+        setOtpError('');
+        setOtpSending(true);
+        try {
+            const csrfToken = await getCsrfToken();
+            const params = new URLSearchParams({ mobile });
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.send_checkout_otp`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrfToken },
+                body: params.toString(),
+            });
+            const data = await res.json();
+            if (data.exc) {
+                const msg = data.exc_type || 'Failed to send OTP';
+                setOtpError(msg);
+                return;
+            }
+            setShowOtpInput(true);
+            // Show OTP in dev if backend returns it (no SMS gateway configured)
+            if (data.message?.otp) {
+                setOtpError(`Dev OTP: ${data.message.otp}`);
+            }
+        } catch {
+            setOtpError('Network error. Please try again.');
+        } finally {
+            setOtpSending(false);
+        }
+    };
+
+    const handleVerifyOtp = async () => {
+        if (otp.length !== 6) {
+            setOtpError('Please enter the 6-digit OTP');
+            return;
+        }
+        setOtpError('');
+        setOtpVerifying(true);
+        try {
+            const csrfToken = await getCsrfToken();
+            const params = new URLSearchParams({ mobile, otp });
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.verify_checkout_otp`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrfToken },
+                body: params.toString(),
+            });
+            const data = await res.json();
+            if (!data.message?.verified) {
+                const msg = data.exception?.split('\n').pop() || data.exc_type || 'Invalid OTP';
+                setOtpError(typeof msg === 'string' ? msg.replace(/^["\[]+|["\]]+$/g, '') : 'Invalid OTP');
+                setOtpVerifying(false);
+                return;
+            }
+        } catch {
+            setOtpError('Network error. Please try again.');
+            setOtpVerifying(false);
+            return;
+        } finally {
+            setOtpVerifying(false);
+        }
+
+        setMobileVerified(true);
+
+        try {
+            const res = await fetch(
+                `${BASE}/api/method/store_customizations.api.get_customer_addresses?mobile=${encodeURIComponent(mobile)}`,
+                { credentials: 'include' }
+            );
+            const data = await res.json();
+            const addresses: SavedAddress[] = data.message || [];
+            setSavedAddresses(addresses);
+            if (addresses.length > 0) {
+                applyAddress(addresses[0]);
+            } else {
+                setShowNewAddressForm(true);
+            }
+        } catch {
+            setShowNewAddressForm(true);
+        }
+
+        setStep('address');
     };
 
     const handleAddressSubmit = (e: React.FormEvent) => {
@@ -88,10 +193,6 @@ const Checkout: React.FC = () => {
         setStep('payment');
     };
 
-    /**
-     * Full checkout flow:
-     *   POST place_order → Sales Order → Sales Invoice → Payment Entry
-     */
     const handlePlaceOrder = async () => {
         setOrderError('');
         setPlacing(true);
@@ -103,13 +204,15 @@ const Checkout: React.FC = () => {
                 quantity: item.quantity,
             }));
 
-            // Use form-encoded body to avoid CSRF "Invalid Request" for guest sessions
             const params = new URLSearchParams({
-                cart_items:     JSON.stringify(cartPayload),
-                address:        JSON.stringify(address),
-                payment_method: paymentMethod,
-                mobile:         mobile,
+                cart_items:          JSON.stringify(cartPayload),
+                address:             JSON.stringify(address),
+                payment_method:      paymentMethod,
+                mobile:              mobile,
             });
+            if (selectedSavedAddress) {
+                params.set('saved_address_name', selectedSavedAddress.name);
+            }
 
             const csrfToken = await getCsrfToken();
             const res = await fetch(
@@ -130,7 +233,6 @@ const Checkout: React.FC = () => {
             if (data.message?.success) {
                 setOrderId(data.message.sales_order || '');
                 setInvoiceId(data.message.sales_invoice || '');
-                // Persist mobile so Orders page can fetch this customer's orders
                 if (mobile) localStorage.setItem('checkout_mobile', mobile);
                 clearCart();
                 setStep('success');
@@ -190,22 +292,42 @@ const Checkout: React.FC = () => {
                                         disabled={showOtpInput}
                                     />
                                 </div>
+                                {otpError && (
+                                    <div style={{
+                                        margin: '8px 0',
+                                        padding: '8px 12px',
+                                        background: otpError.startsWith('Dev OTP') ? 'rgba(59,130,246,0.08)' : 'rgba(239,68,68,0.08)',
+                                        border: `1px solid ${otpError.startsWith('Dev OTP') ? 'rgba(59,130,246,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                                        borderRadius: 8,
+                                        color: otpError.startsWith('Dev OTP') ? '#1e40af' : '#dc2626',
+                                        fontSize: 13,
+                                    }}>
+                                        {otpError}
+                                    </div>
+                                )}
                                 {showOtpInput && (
                                     <div className="otp-section fade-in">
-                                        <p>Enter 4-digit OTP</p>
+                                        <p>Enter 6-digit OTP sent to +91 {mobile}</p>
                                         <input
                                             type="text"
-                                            placeholder="XXXX"
-                                            maxLength={4}
+                                            placeholder="XXXXXX"
+                                            maxLength={6}
                                             value={otp}
-                                            onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                                            onChange={e => { setOtp(e.target.value.replace(/\D/g, '')); setOtpError(''); }}
+                                            inputMode="numeric"
                                         />
-                                        <button className="premium-btn verify-btn" onClick={handleVerifyOtp}>Verify OTP</button>
-                                        <button className="resend-btn" onClick={handleSendOtp}>Resend OTP</button>
+                                        <button className="premium-btn verify-btn" onClick={handleVerifyOtp} disabled={otpVerifying}>
+                                            {otpVerifying ? 'Verifying…' : 'Verify OTP'}
+                                        </button>
+                                        <button className="resend-btn" onClick={handleSendOtp} disabled={otpSending}>
+                                            {otpSending ? 'Sending…' : 'Resend OTP'}
+                                        </button>
                                     </div>
                                 )}
                                 {!showOtpInput && (
-                                    <button className="premium-btn" onClick={handleSendOtp}>Generate OTP</button>
+                                    <button className="premium-btn" onClick={handleSendOtp} disabled={otpSending}>
+                                        {otpSending ? 'Sending…' : 'Generate OTP'}
+                                    </button>
                                 )}
                             </div>
                         )}
@@ -214,17 +336,63 @@ const Checkout: React.FC = () => {
                         {step === 'address' && (
                             <div className="step-content address-step fade-in">
                                 <h2>Delivery Address</h2>
-                                <form onSubmit={handleAddressSubmit}>
-                                    <div className="form-grid">
-                                        <input type="text" placeholder="Full Name (Required)*" required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} />
-                                        <input type="text" placeholder="Pincode (Required)*" required value={address.pincode} onChange={e => setAddress({ ...address, pincode: e.target.value })} />
-                                        <input type="text" placeholder="Address (House No, Building, Street, Area)*" className="full-width" required value={address.addressLine} onChange={e => setAddress({ ...address, addressLine: e.target.value })} />
-                                        <input type="text" placeholder="City/District*" required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} />
-                                        <input type="text" placeholder="State*" required value={address.state} onChange={e => setAddress({ ...address, state: e.target.value })} />
-                                        <input type="text" placeholder="Landmark (Optional)" className="full-width" value={address.landmark} onChange={e => setAddress({ ...address, landmark: e.target.value })} />
+
+                                {/* Show selected saved address */}
+                                {selectedSavedAddress && !showNewAddressForm && (
+                                    <div className="selected-address-card">
+                                        <div className="selected-address-info">
+                                            <div className="selected-address-name">
+                                                {selectedSavedAddress.address_title}
+                                                <span className="address-badge">Selected</span>
+                                            </div>
+                                            <div className="selected-address-text">
+                                                {formatAddress(selectedSavedAddress)}
+                                            </div>
+                                            <div className="selected-address-mobile">+91 {mobile}</div>
+                                        </div>
+                                        <button
+                                            className="change-address-btn"
+                                            onClick={() => setShowAddressPanel(true)}
+                                        >
+                                            Change
+                                        </button>
                                     </div>
-                                    <button type="submit" className="premium-btn">Save & Continue</button>
-                                </form>
+                                )}
+
+                                {/* New address form — shown when no saved addresses or user chose "Add New" */}
+                                {(showNewAddressForm || savedAddresses.length === 0) && (
+                                    <form onSubmit={handleAddressSubmit} style={{ marginTop: selectedSavedAddress ? 16 : 0 }}>
+                                        <div className="form-grid">
+                                            <input type="text" placeholder="Full Name (Required)*" required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} />
+                                            <input type="text" placeholder="Pincode (Required)*" required value={address.pincode} onChange={e => setAddress({ ...address, pincode: e.target.value })} />
+                                            <input type="text" placeholder="Address (House No, Building, Street, Area)*" className="full-width" required value={address.addressLine} onChange={e => setAddress({ ...address, addressLine: e.target.value })} />
+                                            <input type="text" placeholder="City/District*" required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} />
+                                            <input type="text" placeholder="State*" required value={address.state} onChange={e => setAddress({ ...address, state: e.target.value })} />
+                                            <input type="text" placeholder="Landmark (Optional)" className="full-width" value={address.landmark} onChange={e => setAddress({ ...address, landmark: e.target.value })} />
+                                        </div>
+                                        {showNewAddressForm && savedAddresses.length > 0 && (
+                                            <button
+                                                type="button"
+                                                className="back-to-saved-btn"
+                                                onClick={() => { setShowNewAddressForm(false); applyAddress(savedAddresses[0]); }}
+                                            >
+                                                ← Use Saved Address
+                                            </button>
+                                        )}
+                                        <button type="submit" className="premium-btn">Save & Continue</button>
+                                    </form>
+                                )}
+
+                                {/* Continue with selected saved address */}
+                                {selectedSavedAddress && !showNewAddressForm && (
+                                    <button
+                                        className="premium-btn"
+                                        style={{ marginTop: 20 }}
+                                        onClick={() => setStep('payment')}
+                                    >
+                                        Continue
+                                    </button>
+                                )}
                             </div>
                         )}
 
@@ -365,6 +533,57 @@ const Checkout: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* ── Address Selection Panel (Flipkart-style slide-in) ── */}
+            {showAddressPanel && (
+                <div className="address-panel-overlay" onClick={() => setShowAddressPanel(false)}>
+                    <div className="address-panel" onClick={e => e.stopPropagation()}>
+                        <div className="address-panel-header">
+                            <h3>Select delivery address</h3>
+                            <button className="panel-close-btn" onClick={() => setShowAddressPanel(false)}>✕</button>
+                        </div>
+
+                        <div className="address-panel-section-title">
+                            Saved addresses
+                            <button
+                                className="add-new-address-btn"
+                                onClick={() => {
+                                    setSelectedSavedAddress(null);
+                                    setAddress({ fullName: '', pincode: '', addressLine: '', city: '', state: '', landmark: '' });
+                                    setShowNewAddressForm(true);
+                                    setShowAddressPanel(false);
+                                }}
+                            >
+                                + Add New
+                            </button>
+                        </div>
+
+                        <div className="address-panel-list">
+                            {savedAddresses.map(addr => (
+                                <div
+                                    key={addr.name}
+                                    className={`address-panel-item ${selectedSavedAddress?.name === addr.name ? 'selected' : ''}`}
+                                    onClick={() => applyAddress(addr)}
+                                >
+                                    <div className="address-panel-item-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    </div>
+                                    <div className="address-panel-item-body">
+                                        <div className="address-panel-item-title">
+                                            {addr.address_title}
+                                            {selectedSavedAddress?.name === addr.name && (
+                                                <span className="address-selected-badge">Selected</span>
+                                            )}
+                                        </div>
+                                        <div className="address-panel-item-text">{formatAddress(addr)}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Footer />
         </div>
     );

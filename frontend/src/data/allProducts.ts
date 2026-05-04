@@ -7,6 +7,9 @@ export interface Product {
     rating: number;
     gender?: string;
     tags?: string[];
+    has_variants?: boolean;
+    price_range?: string;
+    variant_count?: number;
 }
 
 export const allProducts: Product[] = [

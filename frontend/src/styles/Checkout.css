@@ -354,6 +354,217 @@
     margin: 30px auto 0;
 }
 
+/* ── Selected Address Card ── */
+.selected-address-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    border: 1.5px solid var(--accent, #6366f1);
+    border-radius: 10px;
+    background: rgba(99, 102, 241, 0.05);
+    margin-bottom: 8px;
+}
+
+.selected-address-name {
+    font-weight: 700;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.address-badge {
+    font-size: 11px;
+    font-weight: 600;
+    background: #22c55e;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+}
+
+.selected-address-text {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 4px;
+}
+
+.selected-address-mobile {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.change-address-btn {
+    flex-shrink: 0;
+    background: none;
+    border: 1.5px solid var(--accent, #6366f1);
+    color: var(--accent, #6366f1);
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.change-address-btn:hover {
+    background: var(--accent, #6366f1);
+    color: #fff;
+}
+
+.back-to-saved-btn {
+    background: none;
+    border: none;
+    color: var(--accent, #6366f1);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 12px;
+    display: block;
+}
+
+/* ── Address Panel (slide-in) ── */
+.address-panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1000;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.address-panel {
+    width: 420px;
+    max-width: 100vw;
+    background: var(--card-bg, #fff);
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    animation: slideInRight 0.25s ease;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+
+.address-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--input-border, #e5e7eb);
+}
+
+.address-panel-header h3 {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.panel-close-btn {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--text-dim);
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.panel-close-btn:hover {
+    background: var(--input-bg, #f3f4f6);
+}
+
+.address-panel-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.add-new-address-btn {
+    background: none;
+    border: none;
+    color: var(--accent, #6366f1);
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.address-panel-list {
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 24px;
+    gap: 2px;
+}
+
+.address-panel-item {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 14px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: 1.5px solid transparent;
+}
+
+.address-panel-item:hover {
+    background: var(--input-bg, #f3f4f6);
+}
+
+.address-panel-item.selected {
+    border-color: var(--accent, #6366f1);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.address-panel-item-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--text-dim);
+}
+
+.address-panel-item-title {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.address-selected-badge {
+    font-size: 11px;
+    font-weight: 600;
+    background: #6366f1;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+
+.address-panel-item-text {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
 @media (max-width: 850px) {
     .checkout-content {
         grid-template-columns: 1fr;

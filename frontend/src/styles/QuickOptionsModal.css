@@ -1,0 +1,399 @@
+/* ── Overlay ─────────────────────────────────────────────────────────────── */
+.qom-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 12px;
+    animation: qom-fade-in 0.22s ease;
+}
+
+@keyframes qom-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ── Sheet ───────────────────────────────────────────────────────────────── */
+.qom-sheet {
+    background: var(--bg-main);
+    width: 100%;
+    max-width: 460px;
+    border-radius: 28px;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.3);
+    animation: qom-slide-up 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 48px);
+    overflow: hidden;
+}
+
+@keyframes qom-slide-up {
+    from { transform: translateY(110%); opacity: 0.6; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ── Hero image section ──────────────────────────────────────────────────── */
+.qom-hero {
+    position: relative;
+    height: 170px;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.qom-hero-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+    display: block;
+    transition: transform 0.4s ease;
+}
+
+.qom-hero:hover .qom-hero-img {
+    transform: scale(1.04);
+}
+
+/* gradient fade from image → sheet background */
+.qom-hero-gradient {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(0,0,0,0) 35%,
+        rgba(0,0,0,0.72) 100%
+    );
+    pointer-events: none;
+}
+
+.qom-hero-info {
+    position: absolute;
+    bottom: 16px;
+    left: 18px;
+    right: 52px;
+}
+
+.qom-hero-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 4px;
+    line-height: 1.3;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+}
+
+.qom-hero-price {
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    margin: 0;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+}
+
+/* Close button */
+.qom-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.18);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.18s;
+    z-index: 2;
+}
+
+.qom-close:hover {
+    background: rgba(255,255,255,0.32);
+    transform: rotate(90deg) scale(1.1);
+}
+
+/* drag handle */
+.qom-handle {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    background: rgba(255,255,255,0.45);
+    border-radius: 2px;
+    z-index: 2;
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+.qom-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 16px 20px 6px;
+    scrollbar-width: none;
+}
+
+.qom-body::-webkit-scrollbar {
+    display: none;
+}
+
+/* ── Section label ───────────────────────────────────────────────────────── */
+.qom-section {
+    margin-bottom: 14px;
+}
+
+.qom-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.qom-selected-val {
+    font-weight: 600;
+    text-transform: none;
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0;
+}
+
+/* ── Colour swatches ─────────────────────────────────────────────────────── */
+.qom-swatches {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.qom-swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2.5px solid transparent;
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    transition: transform 0.18s, box-shadow 0.18s;
+    outline: none;
+}
+
+/* white ring gap + accent ring on active */
+.qom-swatch::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    transition: border-color 0.18s;
+}
+
+.qom-swatch:hover {
+    transform: scale(1.15);
+}
+
+.qom-swatch.active {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2.5px var(--bg-main), 0 0 0 5px var(--accent);
+}
+
+/* checkmark on selected swatch */
+.qom-swatch.active::before {
+    content: '✓';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 4px rgba(0,0,0,0.6);
+}
+
+/* ── Size pills ──────────────────────────────────────────────────────────── */
+.qom-sizes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.qom-size-btn {
+    height: 40px;
+    padding: 0 18px;
+    border: 1.5px solid var(--glass-border);
+    background: transparent;
+    color: var(--text-main);
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+    letter-spacing: 0.03em;
+}
+
+.qom-size-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(var(--accent-rgb, 180, 140, 80), 0.06);
+}
+
+.qom-size-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-main);
+    box-shadow: 0 4px 14px rgba(var(--accent-rgb, 180, 140, 80), 0.35);
+}
+
+/* ── Quantity stepper ────────────────────────────────────────────────────── */
+.qom-qty {
+    display: inline-flex;
+    align-items: center;
+    background: var(--glass);
+    border: 1.5px solid var(--glass-border);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.qom-qty button {
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    transition: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qom-qty button:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.qom-qty span {
+    min-width: 44px;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+/* ── Loading / Error ─────────────────────────────────────────────────────── */
+.qom-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 32px 0;
+    color: var(--text-dim);
+    font-size: 14px;
+}
+
+.qom-spinner {
+    width: 34px;
+    height: 34px;
+    border: 3px solid var(--glass-border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: qom-spin 0.7s linear infinite;
+}
+
+@keyframes qom-spin {
+    to { transform: rotate(360deg); }
+}
+
+.qom-error {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 28px 0;
+    font-size: 14px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.qom-footer {
+    padding: 12px 20px 24px;
+    flex-shrink: 0;
+}
+
+.qom-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    margin: 0 0 10px;
+}
+
+/* Gradient "Add to Cart" button with shine sweep */
+.qom-add-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--accent);
+    color: var(--bg-main);
+    border: none;
+    border-radius: 16px;
+    font-size: 15px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s;
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb, 180, 140, 80), 0.4);
+}
+
+/* Shine sweep animation */
+.qom-add-btn::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -75%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+        120deg,
+        transparent 0%,
+        rgba(255,255,255,0.35) 50%,
+        transparent 100%
+    );
+    transform: skewX(-20deg);
+    transition: left 0s;
+}
+
+.qom-add-btn:hover:not(:disabled)::before {
+    left: 130%;
+    transition: left 0.5s ease;
+}
+
+.qom-add-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(var(--accent-rgb, 180, 140, 80), 0.5);
+}
+
+.qom-add-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.qom-add-btn:disabled {
+    background: var(--glass-border);
+    box-shadow: none;
+    color: var(--text-dim);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+

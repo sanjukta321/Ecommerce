@@ -189,6 +189,49 @@
     text-transform: uppercase;
 }
 
+/* Address card action buttons */
+.addr-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s, border-color 0.18s, transform 0.12s;
+    letter-spacing: 0.02em;
+    border: 1.5px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+}
+
+.addr-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.addr-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.addr-btn--danger {
+    border-color: rgba(220, 38, 38, 0.5);
+    color: #dc2626;
+}
+
+.addr-btn--danger:hover:not(:disabled) {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+}
+
+.addr-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -286,8 +329,222 @@
     color: var(--text-dim);
 }
 
+/* ── PAN Card Visual ────────────────────────────────────────── */
+.pan-card-visual {
+    width: 100%;
+    max-width: 420px;
+    background: linear-gradient(135deg, #f0e6c8 0%, #e8d5a3 40%, #f5edd5 100%);
+    border-radius: 16px;
+    padding: 24px 28px 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(180,140,60,0.25);
+}
+
+.pan-card-visual::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 160px; height: 160px;
+    background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.pan-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.pan-card-govt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pan-card-emblem {
+    font-size: 28px;
+    color: #1a1a4e;
+    line-height: 1;
+}
+
+.pan-card-title {
+    text-align: right;
+}
+
+.pan-card-number {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    color: #1a1a4e;
+    font-family: 'Courier New', monospace;
+    margin-bottom: 16px;
+    padding: 8px 0;
+    border-top: 1px solid rgba(26,26,78,0.15);
+    border-bottom: 1px solid rgba(26,26,78,0.15);
+}
+
+.pan-card-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.pan-card-field {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.pan-card-field-label {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(26,26,78,0.55);
+}
+
+.pan-card-field-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a1a4e;
+    letter-spacing: 0.02em;
+}
+
+.pan-verified-badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: #16a34a;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.04em;
+}
+
+/* ── PAN Form ───────────────────────────────────────────────── */
+.pan-form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.pan-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pan-field-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-dim);
+}
+
+.pan-input {
+    width: 100%;
+    padding: 13px 16px;
+    border: 1.5px solid var(--input-border);
+    border-radius: 10px;
+    font-size: 14px;
+    background: var(--input-bg);
+    color: var(--text-main);
+    outline: none;
+    transition: border-color 0.18s;
+    box-sizing: border-box;
+}
+
+.pan-input:not(:disabled):focus {
+    border-color: var(--accent);
+}
+
+.pan-input:disabled {
+    cursor: not-allowed;
+    color: var(--text-dim);
+    -webkit-text-fill-color: var(--text-dim);
+    opacity: 1;
+}
+
+.pan-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin: 0;
+}
+
+/* ── PAN Status ─────────────────────────────────────────────── */
+.pan-status-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 20px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    flex-wrap: wrap;
+}
+
+.pan-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 5px 14px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+.pan-status-badge.verified {
+    background: rgba(22,163,74,0.12);
+    color: #16a34a;
+    border: 1px solid rgba(22,163,74,0.3);
+}
+
+.pan-status-badge.pending {
+    background: rgba(234,179,8,0.12);
+    color: #a16207;
+    border: 1px solid rgba(234,179,8,0.3);
+}
+
+/* ── PAN Info Note ──────────────────────────────────────────── */
+.pan-info-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 24px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: rgba(var(--accent-rgb, 180,140,80), 0.06);
+    border: 1px solid rgba(var(--accent-rgb, 180,140,80), 0.2);
+    max-width: 520px;
+}
+
+.pan-info-note svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--accent);
+}
+
+.pan-info-note span {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+}
+
 @media (max-width: 992px) {
     .profile-container {
         grid-template-columns: 1fr;
+    }
+
+    .pan-card-visual {
+        max-width: 100%;
     }
 }

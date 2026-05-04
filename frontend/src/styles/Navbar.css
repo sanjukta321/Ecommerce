@@ -22,15 +22,21 @@
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    max-width: 1200px;
-    padding: 0 40px;
+    max-width: 1400px;
+    padding: 0 32px;
     margin: 0 auto;
+    gap: 16px;
 }
+
 
 @media (min-width: 1600px) {
     .nav-content {
         max-width: 1400px;
     }
+}
+
+.logo {
+    flex-shrink: 0;
 }
 
 .logo h1 {
@@ -46,6 +52,8 @@
 .search-bar-container {
     position: relative;
     z-index: 10001;
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 .search-bar {
@@ -204,8 +212,11 @@
 
 .nav-links {
     display: flex;
-    gap: 30px;
+    gap: 24px;
     align-items: center;
+    flex-shrink: 1;
+    min-width: 0;
+    flex-wrap: nowrap;
 }
 
 .nav-links li a {
@@ -248,8 +259,8 @@
 
 .mega-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 30px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
 }
 
 .mega-col h3 {
@@ -264,8 +275,9 @@
 
 .nav-actions {
     display: flex;
-    gap: 20px;
+    gap: 16px;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .action-item {
@@ -514,6 +526,7 @@
     background: transparent;
     border: none;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .mobile-toggle span {
@@ -523,16 +536,45 @@
     transition: var(--transition);
 }
 
-@media (max-width: 992px) {
+/* ── Large desktop (1200–1400px): slightly compact ── */
+@media (max-width: 1400px) and (min-width: 1101px) {
+    .nav-links {
+        gap: 18px;
+    }
+
+    .nav-links li a {
+        font-size: 13.5px;
+    }
+
+    .search-bar {
+        width: 240px;
+    }
+
+    .search-bar:focus-within {
+        width: 280px;
+    }
+
+    .nav-actions {
+        gap: 14px;
+    }
+}
+
+/* ── Hamburger at ≤ 1100px ── */
+@media (max-width: 1100px) {
     .navbar {
-        height: 70px;
+        height: 64px;
     }
 
     .nav-content {
-        padding: 0 20px;
+        padding: 0 16px;
+        gap: 8px;
     }
 
-    .search-bar,
+    .search-bar-container {
+        display: none;
+    }
+
+    /* Hide desktop nav-links on mobile */
     .nav-links {
         display: none;
     }
@@ -543,5 +585,109 @@
 
     .logo h1 {
         font-size: 20px;
+    }
+
+    .nav-actions {
+        gap: 10px;
+    }
+
+    .action-item span {
+        display: none;
+    }
+
+    .cart-badge {
+        top: -4px;
+        right: -4px;
+    }
+}
+
+/* ── Mobile menu overlay ── */
+.mobile-menu-overlay {
+    display: none;
+}
+
+@media (max-width: 1100px) {
+    .mobile-menu-overlay {
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        top: 64px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--glass);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-top: 1px solid var(--glass-border);
+        overflow-y: auto;
+        z-index: 9997;
+        animation: mobileMenuIn 0.25s ease;
+    }
+
+    @keyframes mobileMenuIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .mobile-menu-search {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--glass-border);
+        flex-shrink: 0;
+    }
+
+    .mobile-menu-search .search-bar {
+        width: 100%;
+    }
+
+    .mobile-nav-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        flex: 1;
+    }
+
+    .mobile-nav-list li {
+        border-bottom: 1px solid var(--glass-border);
+    }
+
+    .mobile-nav-list li a {
+        display: block;
+        padding: 14px 24px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-main);
+        text-decoration: none;
+        transition: background 0.15s, color 0.15s, padding-left 0.15s;
+    }
+
+    .mobile-nav-list li a:hover {
+        background: var(--hover-bg);
+        color: var(--accent);
+        padding-left: 32px;
+    }
+
+    /* Section label (e.g. "Shop") */
+    .mobile-nav-list .mobile-section-label {
+        padding: 10px 24px 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border-bottom: none;
+        background: var(--primary-light);
+    }
+
+    /* Sub-items indented */
+    .mobile-nav-list .mobile-sub a {
+        padding-left: 36px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-dim);
+    }
+
+    .mobile-nav-list .mobile-sub a:hover {
+        padding-left: 44px;
+        color: var(--accent);
     }
 }

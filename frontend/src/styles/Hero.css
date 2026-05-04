@@ -110,8 +110,8 @@
     padding: 35px;
     z-index: 25;
     box-shadow: 0 40px 100px rgba(0, 0, 0, 0.3);
-    background: #1a1a1a;
-    color: white;
+    background: var(--primary-light);
+    color: var(--text-main);
     border-radius: 12px;
 }
 
@@ -142,6 +142,7 @@
     font-size: 32px;
     font-weight: 700;
     margin-top: 15px;
+    color: var(--text-main);
 }
 
 .hero-content {

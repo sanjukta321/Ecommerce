@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
+import { ToastProvider } from './context/ToastContext';
 import { frappeApi } from './api/frappe';
 import { initCsrfToken } from './services/client';
 import Navbar from './components/Navbar';
@@ -135,13 +136,15 @@ function AppInner() {
 
 function App() {
   return (
-    <CartProvider>
-      <WishlistProvider>
-        <Router basename="/shop">
-          <AppInner />
-        </Router>
-      </WishlistProvider>
-    </CartProvider>
+    <ToastProvider>
+      <CartProvider>
+        <WishlistProvider>
+          <Router basename="/shop">
+            <AppInner />
+          </Router>
+        </WishlistProvider>
+      </CartProvider>
+    </ToastProvider>
   );
 }
 

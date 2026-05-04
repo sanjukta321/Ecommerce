@@ -6,43 +6,67 @@ const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 interface SalesOrder {
   name: string;
+  customer: string;
   customer_name: string;
   grand_total: number;
   status: string;
+  ecom_status: string;
+  payment_method: string;
+  payment_status: string;
+  sales_invoice?: string;
+  delivery_note?: string;
   transaction_date: string;
   delivery_date?: string;
 }
 
-type FilterTab = 'all' | 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+type FilterTab = 'all' | 'Pending' | 'Confirmed' | 'To Bill' | 'Completed';
 
 const TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'processing', label: 'Processing' },
-  { key: 'shipped', label: 'Shipped' },
-  { key: 'delivered', label: 'Delivered' },
-  { key: 'cancelled', label: 'Cancelled' },
+  { key: 'Pending', label: 'Pending' },
+  { key: 'Confirmed', label: 'Confirmed' },
+  { key: 'To Bill', label: 'To Bill' },
+  { key: 'Completed', label: 'Completed' },
 ];
 
-const STATUS_OPTIONS = ['Draft', 'To Deliver and Bill', 'To Bill', 'To Deliver', 'Completed', 'Cancelled', 'Closed'];
+let _csrfCache = '';
 
-function statusKey(s: string): FilterTab {
-  const v = (s || '').toLowerCase();
-  if (v.includes('deliver') || v.includes('complet')) return 'delivered';
-  if (v.includes('cancel')) return 'cancelled';
-  if (v.includes('ship') || v.includes('transit')) return 'shipped';
-  if (v.includes('bill') || v.includes('process')) return 'processing';
-  return 'pending';
+async function getCsrfToken(): Promise<string> {
+  const win = window as any;
+  if (win.frappe?.csrf_token && win.frappe.csrf_token !== 'None') return win.frappe.csrf_token;
+  const meta = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  if (meta && meta !== 'None') return meta;
+  if (_csrfCache) return _csrfCache;
+  try {
+    const res = await fetch(`${BASE}/api/method/store_customizations.api.get_csrf_token`, { credentials: 'include' });
+    const d = await res.json();
+    _csrfCache = d.message || '';
+    return _csrfCache;
+  } catch {
+    return '';
+  }
 }
 
-function apiFetch(path: string, options?: RequestInit) {
+async function apiFetch(path: string, options?: RequestInit) {
+  const csrf = await getCsrfToken();
+
+  // Convert JSON body → form-encoded. Frappe v15 CSRF validation is
+  // reliable only with application/x-www-form-urlencoded, not JSON.
+  let finalBody = options?.body;
+  if (finalBody && typeof finalBody === 'string') {
+    try {
+      finalBody = new URLSearchParams(JSON.parse(finalBody) as Record<string, string>).toString();
+    } catch { /* leave as-is */ }
+  }
+
   return fetch(`${BASE}${path}`, {
     credentials: 'include',
-    headers: {
-      'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''),
-      'Content-Type': 'application/json',
-    },
     ...options,
+    headers: {
+      'X-Frappe-CSRF-Token': csrf,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: finalBody,
   });
 }
 
@@ -53,6 +77,13 @@ function formatDate(dateStr: string) {
   } catch {
     return dateStr;
   }
+}
+
+function ecomBadgeClass(ecom: string): string {
+  if (ecom === 'Completed') return 'delivered';
+  if (ecom === 'To Bill') return 'shipped';
+  if (ecom === 'Confirmed') return 'processing';
+  return 'pending';
 }
 
 export default function AdminOrders() {
@@ -66,18 +97,18 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      let url = '/api/resource/Sales%20Order?fields=["name","customer","customer_name","grand_total","status","transaction_date","delivery_date"]&limit=200&order_by=transaction_date desc';
-      if (customerFilter) {
-        url += `&filters=[["customer","=","${customerFilter}"]]`;
-      }
-      const res = await apiFetch(url);
+      const res = await apiFetch('/api/method/store_customizations.api.get_admin_orders?limit=200');
       const data = await res.json();
-      setOrders(data.data || []);
+      let list: SalesOrder[] = data.message || [];
+      if (customerFilter) {
+        list = list.filter(o => o.customer === customerFilter);
+      }
+      setOrders(list);
     } catch {
       setOrders([]);
     } finally {
@@ -89,25 +120,55 @@ export default function AdminOrders() {
 
   const filtered = activeTab === 'all'
     ? orders
-    : orders.filter(o => statusKey(o.status) === activeTab);
+    : orders.filter(o => o.ecom_status === activeTab);
 
-  const total = orders.length;
-  const pending = orders.filter(o => statusKey(o.status) === 'pending').length;
-  const shipped = orders.filter(o => statusKey(o.status) === 'shipped').length;
-  const delivered = orders.filter(o => statusKey(o.status) === 'delivered').length;
+  const counts = {
+    total: orders.length,
+    pending: orders.filter(o => o.ecom_status === 'Pending').length,
+    confirmed: orders.filter(o => o.ecom_status === 'Confirmed').length,
+    toBill: orders.filter(o => o.ecom_status === 'To Bill').length,
+    completed: orders.filter(o => o.ecom_status === 'Completed').length,
+  };
 
-  const handleStatusChange = async (orderName: string, newStatus: string) => {
-    setUpdatingStatus(orderName);
+  const handleCreateDelivery = async (order: SalesOrder) => {
+    if (!window.confirm(`Create Delivery Note for order ${order.name}?`)) return;
+    setActionLoading(order.name + ':ship');
     try {
-      await apiFetch(`/api/resource/Sales%20Order/${encodeURIComponent(orderName)}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: newStatus }),
+      const res = await apiFetch('/api/method/store_customizations.api.create_delivery_note', {
+        method: 'POST',
+        body: JSON.stringify({ sales_order: order.name }),
       });
-      setOrders(prev => prev.map(o => o.name === orderName ? { ...o, status: newStatus } : o));
+      const data = await res.json();
+      if (data.exc) throw new Error(data.exc_type || 'Error creating delivery note');
+      alert(`Delivery Note created: ${data.message?.delivery_note || ''}`);
+      await fetchOrders();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Status update failed.');
+      alert(e instanceof Error ? e.message : 'Failed to create delivery note');
     } finally {
-      setUpdatingStatus(null);
+      setActionLoading(null);
+    }
+  };
+
+  const handleCollectCOD = async (order: SalesOrder) => {
+    if (!order.sales_invoice) {
+      alert('No Sales Invoice found for this order.');
+      return;
+    }
+    if (!window.confirm(`Mark COD payment collected for order ${order.name}?\nInvoice: ${order.sales_invoice}`)) return;
+    setActionLoading(order.name + ':pay');
+    try {
+      const res = await apiFetch('/api/method/store_customizations.api.collect_cod_payment', {
+        method: 'POST',
+        body: JSON.stringify({ sales_invoice: order.sales_invoice }),
+      });
+      const data = await res.json();
+      if (data.exc) throw new Error(data.exc_type || 'Error recording payment');
+      alert(`Payment Entry created: ${data.message?.payment_entry || ''}`);
+      await fetchOrders();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to record payment');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -116,15 +177,11 @@ export default function AdminOrders() {
   };
 
   const skeletonRows = Array.from({ length: 7 });
-
-  const subtitle = customerFilter
-    ? `Orders for: ${customerNameLabel}`
-    : 'All customer orders';
+  const subtitle = customerFilter ? `Orders for: ${customerNameLabel}` : 'All customer orders';
 
   return (
     <AdminLayout title="Orders" subtitle={subtitle}>
 
-      {/* Customer filter banner */}
       {customerFilter && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12,
@@ -140,10 +197,7 @@ export default function AdminOrders() {
           </span>
           <button
             onClick={() => navigate('/admin/orders')}
-            style={{
-              marginLeft: 'auto', fontSize: 12, color: '#6b7280',
-              background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline',
-            }}
+            style={{ marginLeft: 'auto', fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
           >
             View all orders
           </button>
@@ -160,21 +214,18 @@ export default function AdminOrders() {
               <path d="M16 10a4 4 0 0 1-8 0"/>
             </svg>
           </div>
-          <div className="admin-stat-value">{loading ? '—' : total}</div>
+          <div className="admin-stat-value">{loading ? '—' : counts.total}</div>
           <div className="admin-stat-label">Total Orders</div>
         </div>
-
         <div className="admin-stat-card">
           <div className="admin-stat-icon orange">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
           </div>
-          <div className="admin-stat-value">{loading ? '—' : pending}</div>
-          <div className="admin-stat-label">Pending</div>
+          <div className="admin-stat-value">{loading ? '—' : counts.pending + counts.confirmed}</div>
+          <div className="admin-stat-label">Awaiting Shipment</div>
         </div>
-
         <div className="admin-stat-card">
           <div className="admin-stat-icon purple">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -184,22 +235,22 @@ export default function AdminOrders() {
               <circle cx="18.5" cy="18.5" r="2.5"/>
             </svg>
           </div>
-          <div className="admin-stat-value">{loading ? '—' : shipped}</div>
-          <div className="admin-stat-label">Shipped</div>
+          <div className="admin-stat-value">{loading ? '—' : counts.toBill}</div>
+          <div className="admin-stat-label">Shipped (To Bill)</div>
         </div>
-
         <div className="admin-stat-card">
           <div className="admin-stat-icon green">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
+              <rect x="1" y="4" width="22" height="16" rx="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
             </svg>
           </div>
-          <div className="admin-stat-value">{loading ? '—' : delivered}</div>
-          <div className="admin-stat-label">Delivered</div>
+          <div className="admin-stat-value">{loading ? '—' : counts.completed}</div>
+          <div className="admin-stat-label">Completed</div>
         </div>
       </div>
 
-      {/* Orders table section */}
+      {/* Orders table */}
       <div className="admin-section">
         <div className="admin-section-header">
           <div>
@@ -220,7 +271,6 @@ export default function AdminOrders() {
           </button>
         </div>
 
-        {/* Filter tabs */}
         <div className="admin-filter-tabs">
           {TABS.map(tab => (
             <button
@@ -231,7 +281,7 @@ export default function AdminOrders() {
               {tab.label}
               {tab.key === 'all'
                 ? ` (${orders.length})`
-                : ` (${orders.filter(o => statusKey(o.status) === tab.key).length})`}
+                : ` (${orders.filter(o => o.ecom_status === tab.key).length})`}
             </button>
           ))}
         </div>
@@ -242,7 +292,7 @@ export default function AdminOrders() {
               <tr>
                 <th>Order ID</th>
                 <th>Customer</th>
-                <th>Items</th>
+                <th>Payment</th>
                 <th>Total</th>
                 <th>Status</th>
                 <th>Date</th>
@@ -254,9 +304,7 @@ export default function AdminOrders() {
                 skeletonRows.map((_, i) => (
                   <tr key={i}>
                     {Array.from({ length: 7 }).map((__, j) => (
-                      <td key={j}>
-                        <div className="admin-skeleton" style={{ height: 16, borderRadius: 4 }} />
-                      </td>
+                      <td key={j}><div className="admin-skeleton" style={{ height: 16, borderRadius: 4 }} /></td>
                     ))}
                   </tr>
                 ))
@@ -264,7 +312,7 @@ export default function AdminOrders() {
                 <tr>
                   <td colSpan={7}>
                     <div className="admin-empty">
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5">
                         <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
                         <line x1="3" y1="6" x2="21" y2="6"/>
                         <path d="M16 10a4 4 0 0 1-8 0"/>
@@ -273,45 +321,82 @@ export default function AdminOrders() {
                       <p>
                         {customerFilter
                           ? `${customerNameLabel} has no${activeTab !== 'all' ? ` ${activeTab}` : ''} orders.`
-                          : activeTab !== 'all' ? `No ${activeTab} orders at the moment.` : 'No orders have been placed yet.'}
+                          : activeTab !== 'all' ? `No ${activeTab} orders at the moment.` : 'No orders placed yet.'}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 filtered.map(order => {
-                  const sk = statusKey(order.status);
                   const isExpanded = expandedRow === order.name;
+                  const isCOD = (order.payment_method || '').toLowerCase() === 'cod';
+                  const canShip = !order.delivery_note && ['Confirmed', 'Completed'].includes(order.ecom_status);
+                  const canCollect = isCOD && order.ecom_status === 'To Bill' && order.payment_status !== 'Paid';
+                  const isShipping = actionLoading === order.name + ':ship';
+                  const isPaying = actionLoading === order.name + ':pay';
+
                   return (
                     <>
-                      <tr key={order.name} style={{ background: isExpanded ? '#f8fafc' : undefined }}>
+                      <tr key={order.name} style={{ background: isExpanded ? 'var(--primary-light, #f8fafc)' : undefined }}>
                         <td style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace', fontSize: 13 }}>
                           {order.name}
                         </td>
                         <td style={{ fontWeight: 500 }}>{order.customer_name || '—'}</td>
-                        <td style={{ color: '#64748b', fontSize: 12 }}>—</td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                              color: isCOD ? '#b45309' : '#1e40af',
+                              background: isCOD ? 'rgba(234,179,8,0.1)' : 'rgba(59,130,246,0.08)',
+                              padding: '2px 8px', borderRadius: 20, width: 'fit-content',
+                            }}>
+                              {isCOD ? 'COD' : (order.payment_method || 'COD').toUpperCase()}
+                            </span>
+                            {isCOD && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 600,
+                                color: order.payment_status === 'Paid' ? '#16a34a' : '#9a3412',
+                              }}>
+                                {order.payment_status === 'Paid' ? '✓ Collected' : 'Not collected'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td style={{ fontWeight: 700, color: '#0f172a' }}>
-                          ₹{(order.grand_total ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ₹{(order.grand_total ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                         <td>
-                          <span className={`admin-badge ${sk}`}>
-                            {order.status || 'Unknown'}
+                          <span className={`admin-badge ${ecomBadgeClass(order.ecom_status)}`}>
+                            {order.ecom_status || 'Pending'}
                           </span>
                         </td>
                         <td style={{ color: '#475569', fontSize: 13 }}>
                           {formatDate(order.transaction_date)}
                         </td>
                         <td>
-                          <div className="admin-action-btns" style={{ alignItems: 'center' }}>
-                            <select
-                              className="admin-form-select"
-                              style={{ fontSize: 12, padding: '5px 8px', minWidth: 130 }}
-                              value={order.status}
-                              disabled={updatingStatus === order.name}
-                              onChange={e => handleStatusChange(order.name, e.target.value)}
-                            >
-                              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                          <div className="admin-action-btns" style={{ flexWrap: 'wrap', gap: 6 }}>
+                            {canShip && (
+                              <button
+                                className="admin-btn-primary"
+                                style={{ fontSize: 11, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                                disabled={isShipping}
+                                onClick={() => handleCreateDelivery(order)}
+                                title="Create Delivery Note & mark Shipped"
+                              >
+                                {isShipping ? '…' : '🚚 Ship'}
+                              </button>
+                            )}
+                            {canCollect && (
+                              <button
+                                className="admin-btn-primary"
+                                style={{ fontSize: 11, padding: '5px 10px', background: '#16a34a', whiteSpace: 'nowrap' }}
+                                disabled={isPaying}
+                                onClick={() => handleCollectCOD(order)}
+                                title="Record COD cash payment"
+                              >
+                                {isPaying ? '…' : '💰 Collect COD'}
+                              </button>
+                            )}
                             <button
                               className="admin-btn-edit"
                               onClick={() => toggleExpand(order.name)}
@@ -326,36 +411,28 @@ export default function AdminOrders() {
                       {isExpanded && (
                         <tr key={`${order.name}-detail`}>
                           <td colSpan={7} style={{ background: '#f8fafc', padding: '14px 24px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Order ID</div>
-                                <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>{order.name}</div>
-                              </div>
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Customer</div>
-                                <div style={{ fontSize: 13 }}>{order.customer_name || '—'}</div>
-                              </div>
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Order Date</div>
-                                <div style={{ fontSize: 13 }}>{formatDate(order.transaction_date)}</div>
-                              </div>
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Delivery Date</div>
-                                <div style={{ fontSize: 13 }}>{formatDate(order.delivery_date || '')}</div>
-                              </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+                              {[
+                                ['Order ID', order.name],
+                                ['Customer', order.customer_name || '—'],
+                                ['Order Date', formatDate(order.transaction_date)],
+                                ['Delivery Date', formatDate(order.delivery_date || '')],
+                                ['Payment Method', (order.payment_method || 'COD').toUpperCase()],
+                                ['Payment Status', order.payment_status || '—'],
+                                ['Sales Invoice', order.sales_invoice || '—'],
+                                ['Delivery Note', order.delivery_note || '—'],
+                              ].map(([label, value]) => (
+                                <div key={label}>
+                                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{label}</div>
+                                  <div style={{ fontSize: 13, fontWeight: label === 'Order ID' ? 600 : 400, fontFamily: label === 'Order ID' ? 'monospace' : 'inherit' }}>{value}</div>
+                                </div>
+                              ))}
                               <div>
                                 <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Grand Total</div>
                                 <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
                                   ₹{(order.grand_total ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </div>
                               </div>
-                              <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Status</div>
-                                <span className={`admin-badge ${statusKey(order.status)}`}>{order.status}</span>
-                              </div>
-                            </div>
-                            <div style={{ marginTop: 12, fontSize: 12, color: '#94a3b8' }}>
-                              Item breakdown requires a separate API call to Sales Order Items. Open Frappe to view full line items.
                             </div>
                           </td>
                         </tr>

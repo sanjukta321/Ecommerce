@@ -174,3 +174,16 @@ ul {
     /* Slightly larger text for high-res screens */
   }
 }
+/* Navbar height offset for mobile */
+@media (max-width: 1100px) {
+    .page-top,
+    .checkout-page,
+    .orders-page,
+    .cart-page,
+    .wishlist-page,
+    .product-detail-page,
+    .offers-page,
+    .new-arrivals-page {
+        padding-top: 80px !important;
+    }
+}

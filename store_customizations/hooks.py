@@ -81,7 +81,6 @@ website_route_rules = [
     {"from_route": "/search", "to_route": "shop"},
     {"from_route": "/account", "to_route": "shop"},
     {"from_route": "/profile", "to_route": "shop"},
-    {"from_route": "/login", "to_route": "shop"},
     {"from_route": "/cart", "to_route": "shop"},
     {"from_route": "/wishlist", "to_route": "shop"},
     {"from_route": "/orders", "to_route": "shop"},
@@ -95,7 +94,7 @@ website_route_rules = [
     {"from_route": "/admin/<path:name>", "to_route": "shop"},
     # SB Store base
     {"from_route": "/shop", "to_route": "shop"},
-    {"from_route": "/sbstore/<path:name>", "to_route": "shop"},
+    {"from_route": "/shop/<path:name>", "to_route": "shop"},
 ]
 
 # Generators

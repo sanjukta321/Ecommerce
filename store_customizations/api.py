@@ -53,28 +53,122 @@ def get_current_user_roles():
     return {"roles": roles, "user": user}
 
 
+def _get_contact_for_user(user_email):
+    """
+    Return the primary Contact doc for this user.
+    Looks up via Contact.user field first, falls back to Contact Email child table.
+    Prefers the contact that has a Customer link when multiple exist.
+    """
+    # Try Contact.user field
+    contact_names = frappe.db.get_all("Contact", {"user": user_email}, pluck="name")
+
+    # Fallback: Contact Email child table
+    if not contact_names:
+        parent = frappe.db.get_value("Contact Email", {"email_id": user_email}, "parent")
+        if parent:
+            contact_names = [parent]
+
+    if not contact_names:
+        return None
+
+    # Prefer the contact that is linked to a Customer
+    for c in contact_names:
+        has_customer = frappe.db.exists(
+            "Dynamic Link",
+            {"parent": c, "parenttype": "Contact", "link_doctype": "Customer"},
+        )
+        if has_customer:
+            return frappe.get_doc("Contact", c)
+    return frappe.get_doc("Contact", contact_names[0])
+
+
+def _get_all_customer_names_for_user(user_email):
+    """
+    Return all Customer document names belonging to this user.
+
+    Strategy (in order):
+      1. Contact Dynamic Link  → Customer (when Contact→Customer link exists)
+      2. customer_name = user.full_name  → all matching Customer docs
+      3. Contact Email parent  → Customer via that contact's links
+    """
+    found = set()
+
+    # 1. Via Contact Dynamic Links
+    contact_names = frappe.db.get_all("Contact", {"user": user_email}, pluck="name")
+    if not contact_names:
+        parent = frappe.db.get_value("Contact Email", {"email_id": user_email}, "parent")
+        if parent:
+            contact_names = [parent]
+
+    for c in contact_names:
+        rows = frappe.db.get_all(
+            "Dynamic Link",
+            {"parent": c, "parenttype": "Contact", "link_doctype": "Customer"},
+            pluck="link_name",
+        )
+        found.update(rows)
+
+    # 2. By full_name match — covers sites where Contact→Customer link is missing
+    full_name = frappe.db.get_value("User", user_email, "full_name")
+    if full_name:
+        name_matches = frappe.db.get_all(
+            "Customer", {"customer_name": full_name}, pluck="name"
+        )
+        found.update(name_matches)
+
+    return list(found)
+
+
+def _get_primary_customer_for_user(user_email):
+    """
+    Return the single best Customer name for saving new addresses.
+    Prefers the doc whose name exactly equals full_name (the 'base' record).
+    """
+    all_customers = _get_all_customer_names_for_user(user_email)
+    if not all_customers:
+        return None
+    full_name = frappe.db.get_value("User", user_email, "full_name") or ""
+    # Exact match first (e.g. "Sanjukta Barik" before "Sanjukta Barik - 2")
+    if full_name in all_customers:
+        return full_name
+    return all_customers[0]
+
+
 @frappe.whitelist()
 def get_current_user_profile():
     """
-    Return the logged-in user's own profile fields.
-    Safe alternative to /api/resource/User which Frappe blocks for non-admins.
+    Return the logged-in user's profile fields, merging User + linked Contact.
+    Contact.user links a Contact to a User — mobile is authoritative there.
     """
     user = frappe.session.user
     if not user or user == "Guest":
         frappe.throw("Not logged in", frappe.PermissionError)
 
-    doc = frappe.db.get_value(
+    u = frappe.db.get_value(
         "User", user,
         ["first_name", "last_name", "full_name", "email", "mobile_no", "gender"],
         as_dict=True,
     ) or {}
-    return doc
+
+    contact = _get_contact_for_user(user)
+    # Prefer Contact.mobile_no — it's the field the user fills in from the UI
+    mobile_no = (contact.mobile_no if contact else None) or u.get("mobile_no") or ""
+    gender = u.get("gender") or (contact.gender if contact else "") or ""
+
+    return {
+        "first_name": u.get("first_name") or "",
+        "last_name":  u.get("last_name")  or "",
+        "full_name":  u.get("full_name")  or "",
+        "email":      u.get("email")      or "",
+        "mobile_no":  mobile_no,
+        "gender":     gender,
+    }
 
 
 @frappe.whitelist()
 def update_current_user_profile(first_name=None, last_name=None, gender=None, mobile_no=None):
     """
-    Update allowed fields on the logged-in user's own profile.
+    Update User fields and keep the linked Contact in sync.
     """
     user = frappe.session.user
     if not user or user == "Guest":
@@ -90,16 +184,199 @@ def update_current_user_profile(first_name=None, last_name=None, gender=None, mo
     if mobile_no is not None:
         doc.mobile_no = mobile_no
     doc.save(ignore_permissions=True)
+
+    # Sync mobile to linked Contact
+    if mobile_no is not None:
+        contact = _get_contact_for_user(user)
+        if contact:
+            contact.mobile_no = mobile_no
+            contact.save(ignore_permissions=True)
+
     frappe.db.commit()
 
     return {
-        "first_name": doc.first_name,
-        "last_name": doc.last_name,
-        "full_name": doc.full_name,
-        "email": doc.email,
-        "mobile_no": doc.mobile_no,
-        "gender": doc.gender,
+        "first_name": doc.first_name or "",
+        "last_name":  doc.last_name  or "",
+        "full_name":  doc.full_name  or "",
+        "email":      doc.email      or "",
+        "mobile_no":  doc.mobile_no  or mobile_no or "",
+        "gender":     doc.gender     or "",
     }
+
+
+@frappe.whitelist()
+def get_user_addresses():
+    """
+    Return all addresses linked to any Customer belonging to the logged-in user.
+    Handles sites where multiple Customer docs share the same customer_name.
+    """
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    customer_names = _get_all_customer_names_for_user(user)
+    if not customer_names:
+        return []
+
+    # Collect addresses across all linked customers, deduplicated by address name
+    seen = set()
+    result = []
+    for customer_name in customer_names:
+        rows = frappe.get_all(
+            "Address",
+            filters=[
+                ["Dynamic Link", "link_doctype", "=", "Customer"],
+                ["Dynamic Link", "link_name",    "=", customer_name],
+            ],
+            fields=[
+                "name", "address_title", "address_type",
+                "address_line1", "address_line2",
+                "city", "state", "pincode", "country",
+                "is_primary_address", "is_shipping_address",
+            ],
+        )
+        for row in rows:
+            if row["name"] not in seen:
+                seen.add(row["name"])
+                result.append(row)
+
+    return result
+
+
+@frappe.whitelist()
+def save_user_address(address_line1, city, state, pincode,
+                      country="India", address_line2=None,
+                      address_type="Home", address_name=None):
+    """
+    Create or update an Address linked to the user's primary Customer record.
+    """
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    customer_name = _get_primary_customer_for_user(user)
+    full_name = frappe.db.get_value("User", user, "full_name") or user
+
+    if address_name:
+        doc = frappe.get_doc("Address", address_name)
+    else:
+        doc = frappe.new_doc("Address")
+        doc.address_title = full_name
+        doc.address_type = address_type or "Home"
+        if customer_name:
+            doc.append("links", {"link_doctype": "Customer", "link_name": customer_name})
+
+    doc.address_line1 = address_line1
+    doc.address_line2 = address_line2 or ""
+    doc.city = city
+    doc.state = state
+    doc.pincode = str(pincode)
+    doc.country = country or "India"
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return {
+        "name":                doc.name,
+        "address_title":       doc.address_title  or "",
+        "address_type":        doc.address_type   or "",
+        "address_line1":       doc.address_line1  or "",
+        "address_line2":       doc.address_line2  or "",
+        "city":                doc.city           or "",
+        "state":               doc.state          or "",
+        "pincode":             doc.pincode        or "",
+        "country":             doc.country        or "",
+        "is_primary_address":  doc.is_primary_address,
+        "is_shipping_address": doc.is_shipping_address,
+    }
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_user_address(address_name):
+    """
+    Delete an Address document that belongs to the logged-in user.
+    Verifies the address is linked to one of the user's customers before deleting.
+    """
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    customer_names = _get_all_customer_names_for_user(user)
+    if not customer_names:
+        frappe.throw("No customer account found", frappe.PermissionError)
+
+    # Verify the address belongs to this user via a customer link
+    linked = frappe.db.exists(
+        "Dynamic Link",
+        {
+            "parent": address_name,
+            "parenttype": "Address",
+            "link_doctype": "Customer",
+            "link_name": ["in", customer_names],
+        },
+    )
+    if not linked:
+        frappe.throw("Address not found or access denied", frappe.PermissionError)
+
+    frappe.delete_doc("Address", address_name, ignore_permissions=True)
+    frappe.db.commit()
+    return {"deleted": address_name}
+
+
+@frappe.whitelist()
+def get_pan_info():
+    """Return PAN details stored against the user's primary Customer record."""
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    customer_name = _get_primary_customer_for_user(user)
+    if not customer_name:
+        return {}
+
+    data = frappe.db.get_value(
+        "Customer", customer_name,
+        ["pan_number", "pan_holder_name", "pan_dob", "pan_verified"],
+        as_dict=True,
+    ) or {}
+
+    return {
+        "pan_number":     data.get("pan_number")     or "",
+        "pan_holder_name": data.get("pan_holder_name") or "",
+        "pan_dob":        str(data.get("pan_dob") or ""),
+        "pan_verified":   bool(data.get("pan_verified")),
+    }
+
+
+@frappe.whitelist(methods=["POST"])
+def save_pan_info(pan_number=None, pan_holder_name=None, pan_dob=None):
+    """Save PAN details to the user's primary Customer record."""
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    if pan_number:
+        pan_number = pan_number.strip().upper()
+        import re
+        if not re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', pan_number):
+            frappe.throw("Invalid PAN format. Expected format: ABCDE1234F")
+
+    customer_name = _get_primary_customer_for_user(user)
+    if not customer_name:
+        frappe.throw("No customer account found")
+
+    updates = {}
+    if pan_number is not None:
+        updates["pan_number"] = pan_number
+    if pan_holder_name is not None:
+        updates["pan_holder_name"] = pan_holder_name.strip()
+    if pan_dob is not None:
+        updates["pan_dob"] = pan_dob or None
+
+    if updates:
+        frappe.db.set_value("Customer", customer_name, updates)
+        frappe.db.commit()
+
+    return get_pan_info()
 
 
 @frappe.whitelist()
@@ -175,8 +452,12 @@ def register_customer(contact, otp, full_name, password, email=None, phone=None)
             frappe.throw("Email address is required when signing up with mobile number.")
         user_email = email.strip()
         user_phone = contact
-        if frappe.db.exists("User", user_email):
-            frappe.throw("An account with this email already exists.")
+
+    if frappe.db.exists("User", user_email):
+        frappe.throw("An account with this email already exists.")
+
+    if user_phone and frappe.db.get_value("User", {"mobile_no": user_phone}, "name"):
+        frappe.throw("An account with this mobile number already exists.")
 
     cache_key = f"reg_otp_{contact}"
     stored_otp = frappe.cache().get_value(cache_key)
@@ -352,14 +633,14 @@ def get_all_products(item_group=None, limit=100):
     if frappe.session.user == "Guest":
         frappe.set_user("Administrator")
 
-    filters = {"disabled": 0, "has_variants": 0}
+    filters = {"disabled": 0, "variant_of": ["is", "not set"]}
     if item_group:
         filters["item_group"] = item_group
 
     items = frappe.get_all(
         "Item",
         filters=filters,
-        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled"],
+        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled", "has_variants"],
         limit=limit,
     )
 
@@ -410,6 +691,36 @@ def get_all_products(item_group=None, limit=100):
         else:
             item["gender"] = None
 
+    # Enrich template items with price range and variant count
+    template_codes = [i["name"] for i in items if i.get("has_variants")]
+    if template_codes:
+        from collections import defaultdict
+        variant_rows = frappe.get_all(
+            "Item",
+            filters={"variant_of": ["in", template_codes], "disabled": 0},
+            fields=["variant_of", "standard_rate", "image"],
+        )
+        tpl_prices = defaultdict(list)
+        tpl_count  = defaultdict(int)
+        tpl_image  = {}
+        for v in variant_rows:
+            tpl_count[v["variant_of"]] += 1
+            if v["standard_rate"]:
+                tpl_prices[v["variant_of"]].append(float(v["standard_rate"]))
+            if v["image"] and v["variant_of"] not in tpl_image:
+                tpl_image[v["variant_of"]] = v["image"]
+
+        for item in items:
+            if item.get("has_variants"):
+                prices = tpl_prices.get(item["name"], [])
+                if prices:
+                    lo, hi = int(min(prices)), int(max(prices))
+                    item["price_range"]  = f"₹{lo:,} – ₹{hi:,}" if lo != hi else f"₹{lo:,}"
+                    item["selling_price"] = min(prices)
+                item["variant_count"] = tpl_count.get(item["name"], 0)
+                if not item.get("image") and item["name"] in tpl_image:
+                    item["image"] = tpl_image[item["name"]]
+
     return items
 
 
@@ -440,8 +751,76 @@ def get_product(item_code):
         order_by="modified desc",
     )
     item["selling_price"] = selling_price or item.get("standard_rate") or 0
+    item["has_variants"]  = frappe.db.get_value("Item", item_code, "has_variants") or 0
 
     return item
+
+
+@frappe.whitelist(allow_guest=True)
+def get_item_variants(item_code):
+    """Return all variants for a template item with their attributes, price, and image."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    if not frappe.db.exists("Item", item_code):
+        frappe.throw(f"Item not found: {item_code}", frappe.DoesNotExistError)
+
+    has_variants = frappe.db.get_value("Item", item_code, "has_variants")
+    if not has_variants:
+        frappe.throw(f"{item_code} is not a template item", frappe.ValidationError)
+
+    variants = frappe.get_all(
+        "Item",
+        filters={"variant_of": item_code, "disabled": 0},
+        fields=["name", "standard_rate", "image"],
+    )
+
+    variant_codes = [v["name"] for v in variants]
+    attr_rows = frappe.get_all(
+        "Item Variant Attribute",
+        filters={"parent": ["in", variant_codes]},
+        fields=["parent", "attribute", "attribute_value"],
+    )
+
+    attr_map: dict = {}
+    for row in attr_rows:
+        attr_map.setdefault(row["parent"], {})[row["attribute"]] = row["attribute_value"]
+
+    item_prices = frappe.get_all(
+        "Item Price",
+        filters={"item_code": ["in", variant_codes], "selling": 1},
+        fields=["item_code", "price_list_rate"],
+        order_by="modified desc",
+    )
+    price_map: dict = {}
+    for ip in item_prices:
+        if ip["item_code"] not in price_map:
+            price_map[ip["item_code"]] = ip["price_list_rate"]
+
+    base_url = frappe.utils.get_url()
+    result = []
+    for v in variants:
+        img = v["image"] or ""
+        if img and not img.startswith("http") and not img.startswith("data:"):
+            img = base_url + img
+        price = float(price_map.get(v["name"]) or v["standard_rate"] or 0)
+        entry: dict = {"item_code": v["name"], "price": price, "image": img}
+        entry.update(attr_map.get(v["name"], {}))
+        result.append(entry)
+
+    # Build { attribute, values[] } objects from the attr_rows
+    attr_values: dict = {}
+    for row in attr_rows:
+        attr = row["attribute"]
+        val  = row["attribute_value"]
+        if attr not in attr_values:
+            attr_values[attr] = []
+        if val not in attr_values[attr]:
+            attr_values[attr].append(val)
+
+    all_attrs = [{"attribute": attr, "values": vals} for attr, vals in attr_values.items()]
+
+    return {"attributes": all_attrs, "variants": result}
 
 
 # Example — uncomment and customise when needed:
@@ -487,25 +866,196 @@ def get_my_orders(mobile=None):
     orders = frappe.get_list(
         "Sales Order",
         filters={"customer": customer, "docstatus": ["!=", 2]},
-        fields=["name", "grand_total", "status", "transaction_date", "delivery_date"],
+        fields=["name", "grand_total", "status", "transaction_date", "delivery_date", "po_no"],
         order_by="transaction_date desc",
         limit=50,
     )
 
-    # Attach line items to each order
     for order in orders:
         items = frappe.get_all(
             "Sales Order Item",
             filters={"parent": order["name"]},
             fields=["item_code", "item_name", "qty", "rate", "amount", "image"],
         )
-        # Fallback: use item_code when item_name is blank
         for item in items:
             if not item.get("item_name"):
                 item["item_name"] = item.get("item_code", "")
         order["items"] = items
+        order["payment_method"] = _decode_po_no(order.pop("po_no"))
+        order.update(_order_ecom_status(order["name"], order["status"]))
 
     return orders
+
+
+def _decode_po_no(po_no):
+    """Extract the payment method from po_no (stored as 'method:uniquehash')."""
+    if not po_no:
+        return "cod"
+    return po_no.split(":")[0]
+
+
+def _order_ecom_status(so_name, so_status):
+    """
+    Ecommerce status for a Sales Order.
+    Flow: Pending → Confirmed → To Bill (after ship) → Completed (after payment)
+    """
+    si_name = frappe.db.get_value("Sales Invoice Item", {"sales_order": so_name}, "parent")
+    dn_name = frappe.db.get_value("Delivery Note Item", {"against_sales_order": so_name}, "parent")
+
+    payment_status = "Unpaid"
+    if si_name:
+        si_data = frappe.db.get_value(
+            "Sales Invoice", si_name, ["outstanding_amount", "docstatus"], as_dict=True
+        )
+        if si_data and si_data.docstatus == 1 and (si_data.outstanding_amount or 0) <= 0:
+            payment_status = "Paid"
+
+    if payment_status == "Paid":
+        ecom_status = "Completed"
+    elif dn_name:
+        ecom_status = "To Bill"
+    elif so_status in ("To Deliver and Bill", "To Bill", "To Deliver", "Completed"):
+        ecom_status = "Confirmed"
+    else:
+        ecom_status = "Pending"
+
+    return {
+        "ecom_status":    ecom_status,
+        "payment_status": payment_status,
+        "sales_invoice":  si_name,
+        "delivery_note":  dn_name,
+    }
+
+
+@frappe.whitelist()
+def get_admin_orders(limit=100):
+    """Return all orders with enriched COD status for the admin dashboard."""
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    orders = frappe.get_list(
+        "Sales Order",
+        filters={"docstatus": ["!=", 2]},
+        fields=["name", "customer", "customer_name", "grand_total", "status",
+                "transaction_date", "delivery_date", "po_no"],
+        order_by="transaction_date desc",
+        limit=int(limit),
+    )
+
+    for order in orders:
+        order["payment_method"] = _decode_po_no(order.pop("po_no"))
+        order.update(_order_ecom_status(order["name"], order["status"]))
+
+    return orders
+
+
+@frappe.whitelist()
+def create_delivery_note(sales_order):
+    """Create and submit a Delivery Note from a Sales Order. Admin only."""
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    if not frappe.db.exists("Sales Order", sales_order):
+        frappe.throw(f"Sales Order not found: {sales_order}")
+
+    existing = frappe.db.get_value("Delivery Note Item", {"against_sales_order": sales_order}, "parent")
+    if existing:
+        return {"delivery_note": existing, "message": "Delivery Note already exists"}
+
+    so = frappe.get_doc("Sales Order", sales_order)
+    company = so.company or frappe.defaults.get_defaults().get("company") or frappe.db.get_value("Company", {}, "name")
+
+    try:
+        from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
+        dn = make_delivery_note(sales_order)
+    except Exception:
+        dn = frappe.new_doc("Delivery Note")
+        dn.company = company
+        dn.customer = so.customer
+        dn.posting_date = frappe.utils.today()
+        if so.customer_address:
+            dn.customer_address = so.customer_address
+        if so.shipping_address_name:
+            dn.shipping_address_name = so.shipping_address_name
+        for so_item in so.items:
+            dn.append("items", {
+                "item_code":            so_item.item_code,
+                "qty":                  so_item.qty,
+                "rate":                 so_item.rate,
+                "against_sales_order":  sales_order,
+                "so_detail":            so_item.name,
+            })
+
+    dn.flags.ignore_permissions = True
+    dn.insert(ignore_permissions=True)
+    frappe.db.commit()
+    dn.flags.ignore_permissions = True
+    dn.submit()
+    frappe.db.commit()
+
+    return {"delivery_note": dn.name, "message": "Delivery Note created and submitted"}
+
+
+@frappe.whitelist()
+def mark_order_delivered(sales_order):
+    """
+    Mark a Shipped COD order as Delivered by closing its Delivery Note.
+    ERPNext sets DN status to 'To Bill' (not 'Completed') when the invoice was
+    created from the Sales Order instead of the DN, so we close it manually.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    if not frappe.db.exists("Sales Order", sales_order):
+        frappe.throw(f"Sales Order not found: {sales_order}")
+
+    dn_name = frappe.db.get_value(
+        "Delivery Note Item", {"against_sales_order": sales_order}, "parent"
+    )
+    if not dn_name:
+        frappe.throw("No Delivery Note found for this order. Please ship the order first.")
+
+    dn_status = frappe.db.get_value("Delivery Note", dn_name, "status")
+    if dn_status in ("Completed", "Closed"):
+        return {"delivery_note": dn_name, "message": "Already marked as delivered"}
+
+    frappe.db.set_value("Delivery Note", dn_name, "status", "Closed")
+    frappe.db.commit()
+
+    return {"delivery_note": dn_name, "message": "Order marked as delivered"}
+
+
+@frappe.whitelist()
+def collect_cod_payment(sales_invoice):
+    """Create Payment Entry for COD after delivery. Admin only."""
+    if frappe.session.user == "Guest":
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    if not frappe.db.exists("Sales Invoice", sales_invoice):
+        frappe.throw(f"Invoice not found: {sales_invoice}")
+
+    existing = frappe.db.get_value(
+        "Payment Entry Reference",
+        {"reference_doctype": "Sales Invoice", "reference_name": sales_invoice},
+        "parent",
+    )
+    if existing:
+        return {"payment_entry": existing, "message": "Payment already collected"}
+
+    si = frappe.get_doc("Sales Invoice", sales_invoice)
+
+    # Submit SI if still Draft (COD orders keep SI as Draft until payment collected)
+    # Submitting SI triggers ERPNext to auto-set DN + SO status to "Completed"
+    if si.docstatus == 0:
+        si.flags.ignore_permissions = True
+        si.submit()
+        frappe.db.commit()
+        si.reload()
+
+    pe_name = _checkout_create_payment_entry(si, "cod")
+    frappe.db.commit()
+
+    return {"payment_entry": pe_name, "message": "COD payment collected successfully"}
 
 
 # ─────────────────────────────────────────────
@@ -741,7 +1291,97 @@ def save_admin_product(
 # ─────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=True)
-def place_order(cart_items, address, payment_method, mobile=None):
+def send_checkout_otp(mobile):
+    """Send a 6-digit OTP for checkout mobile verification (works for new and existing customers)."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    mobile = (mobile or "").strip()
+    if not mobile or len(mobile) < 10:
+        frappe.throw("A valid 10-digit mobile number is required.")
+
+    otp = str(secrets.randbelow(900000) + 100000)
+    frappe.cache().set_value(f"checkout_otp_{mobile}", otp, expires_in_sec=300)
+    frappe.cache().delete_value(f"checkout_otp_attempts_{mobile}")
+
+    # In production wire this to an SMS gateway; for now return the OTP in response
+    return {"message": "OTP sent to your mobile", "otp": otp}
+
+
+@frappe.whitelist(allow_guest=True)
+def verify_checkout_otp(mobile, otp):
+    """Verify the checkout mobile OTP. Returns {verified: True} on success, throws on failure."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    mobile = (mobile or "").strip()
+    otp    = (otp    or "").strip()
+
+    cache_key   = f"checkout_otp_{mobile}"
+    attempt_key = f"checkout_otp_attempts_{mobile}"
+
+    stored_otp = frappe.cache().get_value(cache_key)
+    if not stored_otp:
+        frappe.throw("OTP has expired. Please request a new one.")
+
+    attempts = int(frappe.cache().get_value(attempt_key) or 0)
+    if attempts >= 5:
+        frappe.cache().delete_value(cache_key)
+        frappe.cache().delete_value(attempt_key)
+        frappe.throw("Too many failed attempts. Please request a new OTP.")
+
+    if stored_otp != str(otp):
+        frappe.cache().set_value(attempt_key, attempts + 1, expires_in_sec=300)
+        frappe.throw("Invalid OTP. Please try again.")
+
+    frappe.cache().delete_value(cache_key)
+    frappe.cache().delete_value(attempt_key)
+    return {"verified": True}
+
+
+@frappe.whitelist(allow_guest=True)
+def get_customer_addresses(mobile):
+    """Return all saved addresses for the customer identified by mobile number."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    mobile = (mobile or "").strip()
+    if not mobile:
+        return []
+
+    customer = frappe.db.get_value("Customer", {"mobile_no": mobile}, "name")
+    if not customer:
+        return []
+
+    links = frappe.get_all(
+        "Dynamic Link",
+        filters={"link_doctype": "Customer", "link_name": customer, "parenttype": "Address"},
+        fields=["parent"],
+        order_by="creation desc",
+    )
+
+    addresses = []
+    for link in links:
+        try:
+            addr = frappe.get_doc("Address", link.parent)
+            addresses.append({
+                "name":          addr.name,
+                "address_title": addr.address_title or "",
+                "address_line1": addr.address_line1 or "",
+                "address_line2": addr.address_line2 or "",
+                "city":          addr.city or "",
+                "state":         addr.state or "",
+                "pincode":       addr.pincode or "",
+                "country":       addr.country or "India",
+            })
+        except Exception:
+            pass
+
+    return addresses
+
+
+@frappe.whitelist(allow_guest=True)
+def place_order(cart_items, address, payment_method, mobile=None, saved_address_name=None):
     """
     Checkout flow:
       1. Resolve/create Customer + Address
@@ -763,24 +1403,36 @@ def place_order(cart_items, address, payment_method, mobile=None):
         frappe.throw("Cart is empty")
 
     # 1. Resolve Customer + Address
-    customer     = _checkout_resolve_customer(address, mobile)
-    address_name = _checkout_get_or_create_address(customer, address)
+    customer = _checkout_resolve_customer(address, mobile)
+    if saved_address_name and frappe.db.exists("Address", saved_address_name):
+        address_name = saved_address_name
+    else:
+        address_name = _checkout_get_or_create_address(customer, address)
 
     # 2. Sales Order — helper inserts it, commit locks the naming series, then submit
     so = _checkout_create_sales_order(customer, cart_items, address_name)
+    # Encode payment method into po_no with a unique suffix so Frappe never
+    # rejects duplicate PO numbers across orders for the same customer.
+    so.po_no = f"{payment_method}:{secrets.token_hex(4)}"
+    so.save(ignore_permissions=True)
     frappe.db.commit()          # lock SO name in naming series before submit
     so.flags.ignore_permissions = True
     so.submit()
     frappe.db.commit()
 
-    # 3. Sales Invoice from submitted SO — helper inserts it, commit, then submit
+    # 3. Sales Invoice from submitted SO
+    # COD: keep SI as Draft — submitting it would auto-mark SO+DN as "Completed"
+    #      via ERPNext's billing status propagation, before payment is collected.
+    #      SI is submitted later in collect_cod_payment.
+    # Online: submit immediately so payment entry can be created against it.
     si = _checkout_create_sales_invoice(so, customer)
     frappe.db.commit()          # lock SI name before submit
-    si.flags.ignore_permissions = True
-    si.submit()
-    frappe.db.commit()
+    if payment_method != "cod":
+        si.flags.ignore_permissions = True
+        si.submit()
+        frappe.db.commit()
 
-    # 4. Payment Entry (online only; COD needs no PE)
+    # 4. Payment Entry (online only; COD needs no PE at checkout)
     pe_name        = None
     payment_status = "cod" if payment_method == "cod" else "pending"
 
@@ -805,14 +1457,23 @@ def place_order(cart_items, address, payment_method, mobile=None):
 
 def _checkout_resolve_customer(address, mobile):
     """Return existing customer for logged-in user, or create a new one."""
-    # Logged-in Frappe user → look up their linked Customer
     user = frappe.session.user
     if user and user not in ("Guest", "Administrator"):
+        # Try direct email_id field on Customer
         cust = frappe.db.get_value("Customer", {"email_id": user}, "name")
+        if not cust:
+            # Try via Contact Email → Dynamic Link chain
+            contact_name = frappe.db.get_value("Contact Email", {"email_id": user}, "parent")
+            if contact_name:
+                cust = frappe.db.get_value(
+                    "Dynamic Link",
+                    {"parenttype": "Contact", "parent": contact_name, "link_doctype": "Customer"},
+                    "link_name",
+                )
         if cust:
             return cust
 
-    # Returning guest? Find by mobile
+    # Guest: find by mobile number
     if mobile:
         cust = frappe.db.get_value("Customer", {"mobile_no": mobile}, "name")
         if cust:
@@ -1038,47 +1699,43 @@ def _checkout_create_payment_entry(si, payment_method):
 @frappe.whitelist(allow_guest=True)
 def get_order_status(sales_order):
     """
-    Return the status of a Sales Order including linked invoice and payment.
-    Used by the frontend to poll after checkout.
+    Return the full 5-state ecommerce status for a Sales Order.
+    States: Pending → Confirmed → Shipped → Delivered → Paid
     """
     if not frappe.db.exists("Sales Order", sales_order):
         frappe.throw(f"Order not found: {sales_order}", frappe.DoesNotExistError)
 
     so = frappe.db.get_value(
         "Sales Order", sales_order,
-        ["name", "status", "grand_total", "customer", "transaction_date"],
+        ["name", "status", "grand_total", "customer", "transaction_date", "po_no"],
         as_dict=True,
     )
 
-    # Find linked Sales Invoice via SO reference on invoice items
-    si_name = frappe.db.get_value(
-        "Sales Invoice Item", {"sales_order": sales_order}, "parent"
-    )
-    invoice_status = None
-    payment_status = "Unpaid"
-    outstanding    = None
+    enriched = _order_ecom_status(sales_order, so.status)
+    si_name  = enriched["sales_invoice"]
 
+    invoice_status = None
+    outstanding    = None
     if si_name:
         si_data = frappe.db.get_value(
             "Sales Invoice", si_name,
-            ["status", "outstanding_amount"], as_dict=True
+            ["status", "outstanding_amount"], as_dict=True,
         )
-        invoice_status = si_data.status
-        outstanding    = si_data.outstanding_amount
-        pe_exists = frappe.db.exists(
-            "Payment Entry Reference",
-            {"reference_doctype": "Sales Invoice", "reference_name": si_name},
-        )
-        payment_status = "Paid" if pe_exists else "Unpaid"
+        if si_data:
+            invoice_status = si_data.status
+            outstanding    = si_data.outstanding_amount
 
     return {
         "sales_order":    so.name,
         "order_status":   so.status,
+        "ecom_status":    enriched["ecom_status"],
         "grand_total":    so.grand_total,
+        "payment_method": _decode_po_no(so.po_no),
         "sales_invoice":  si_name,
+        "delivery_note":  enriched["delivery_note"],
         "invoice_status": invoice_status,
         "outstanding":    outstanding,
-        "payment_status": payment_status,
+        "payment_status": enriched["payment_status"],
     }
 
 
@@ -1409,7 +2066,7 @@ def check_products_setup():
         "has_item_read_permission": has_read,
         "total_items": total_items,
         "disabled_items": disabled_items,
-        "active_items": active_items,
+        "website_items": active_items,
         "is_system_manager": "System Manager" in roles,
         "site": frappe.local.site
     }
