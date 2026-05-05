@@ -5,6 +5,8 @@
   <link rel="icon" type="image/svg+xml" href="/assets/store_customizations/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SB Store</title>
+  <!-- Ensure URL starts with /shop so React Router basename="/shop" works -->
+  <script>(function(){var p=window.location.pathname;if(!p.startsWith('/shop')){window.location.replace('/shop'+(p==='/'?'':p)+window.location.search+window.location.hash);}})();</script>
   <!-- Define window.frappe so Frappe's csrf_token injection doesn't throw ReferenceError -->
   <script>window.frappe = window.frappe || {};</script>
   <!-- csrf_token -->

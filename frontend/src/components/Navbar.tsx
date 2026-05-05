@@ -5,7 +5,11 @@ import type { Product } from '../data/allProducts';
 import { frappeApi } from '../api/frappe';
 import { mapToProduct } from '../hooks/useFrappeProducts';
 import { useCart } from '../context/CartContext';
+import { useSiteConfig } from '../context/SiteConfigContext';
+import { BrandLogo } from './BrandLogo';
 import '../styles/Navbar.css';
+
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 interface NavbarProps {
     isLoggedIn: boolean;
@@ -13,12 +17,14 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
+    const { app_name, logo_url } = useSiteConfig();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [suggestions, setSuggestions] = useState<Product[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+    const [logoError, setLogoError] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
     const { cartCount } = useCart();
@@ -214,7 +220,16 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
         <nav className="navbar">
             <div className="nav-content">
                 <div className="logo">
-                    <Link to="/"><h1>SB<span>Store</span></h1></Link>
+                    <Link to="/">
+                        {logo_url && !logoError
+                            ? <img
+                                src={logo_url.startsWith('http') ? logo_url : `${BASE}${logo_url}`}
+                                alt={app_name}
+                                style={{ maxHeight: 44, width: 'auto', display: 'block' }}
+                                onError={() => setLogoError(true)}
+                              />
+                            : <BrandLogo appName={app_name} size="md" />}
+                    </Link>
                 </div>
 
                 {/* Desktop search */}
@@ -271,7 +286,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                     <li><Link to="/contact">Contact Us</Link></li>
                     <li>
                         <Link to="/become-seller" className="sell-link" style={{ color: 'var(--accent)', fontWeight: 800 }}>
-                            Sell on SB Store
+                            Sell on {app_name}
                         </Link>
                     </li>
                 </ul>
@@ -463,7 +478,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                     <li><Link to="/contact" onClick={close}>Contact Us</Link></li>
                     <li>
                         <Link to="/become-seller" onClick={close} style={{ color: 'var(--accent)', fontWeight: 800 }}>
-                            Sell on SB Store
+                            Sell on {app_name}
                         </Link>
                     </li>
                 </ul>

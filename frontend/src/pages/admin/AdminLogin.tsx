@@ -1,11 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSiteConfig } from '../../context/SiteConfigContext';
+import { BrandLogo } from '../../components/BrandLogo';
 import '../../styles/Admin.css';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const { app_name, logo_url } = useSiteConfig();
   const [usr, setUsr] = useState('');
   const [pwd, setPwd] = useState('');
   const [loading, setLoading] = useState(false);
@@ -95,26 +98,18 @@ export default function AdminLogin() {
       <div className="admin-login-card">
         {/* Logo */}
         <div className="admin-login-logo">
-          <div className="admin-login-logo-icon">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-          </div>
-          <div>
-            <p className="admin-login-title">SB Admin</p>
-            <p className="admin-login-subtitle">Control Panel</p>
-          </div>
+          {logo_url
+            ? <>
+                <div className="admin-login-logo-icon">
+                  <img src={logo_url.startsWith('http') ? logo_url : `${BASE}${logo_url}`} alt={app_name} style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 6 }} />
+                </div>
+                <div>
+                  <p className="admin-login-title">{app_name}</p>
+                  <p className="admin-login-subtitle">Admin Panel</p>
+                </div>
+              </>
+            : <div style={{ color: '#fff' }}><BrandLogo appName={app_name} size="lg" /></div>
+          }
         </div>
 
         {/* Error */}

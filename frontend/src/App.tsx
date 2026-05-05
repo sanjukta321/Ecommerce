@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { ToastProvider } from './context/ToastContext';
+import { SiteConfigProvider } from './context/SiteConfigContext';
 import { frappeApi } from './api/frappe';
 import { initCsrfToken } from './services/client';
 import Navbar from './components/Navbar';
@@ -136,15 +137,17 @@ function AppInner() {
 
 function App() {
   return (
-    <ToastProvider>
-      <CartProvider>
-        <WishlistProvider>
-          <Router basename="/shop">
-            <AppInner />
-          </Router>
-        </WishlistProvider>
-      </CartProvider>
-    </ToastProvider>
+    <SiteConfigProvider>
+      <ToastProvider>
+        <CartProvider>
+          <WishlistProvider>
+            <Router basename="/shop">
+              <AppInner />
+            </Router>
+          </WishlistProvider>
+        </CartProvider>
+      </ToastProvider>
+    </SiteConfigProvider>
   );
 }
 

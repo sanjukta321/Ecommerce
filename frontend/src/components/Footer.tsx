@@ -1,14 +1,21 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useSiteConfig } from '../context/SiteConfigContext';
+import { BrandLogo } from './BrandLogo';
 import '../styles/Footer.css';
 
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+
 const Footer: React.FC = () => {
+    const { app_name, logo_url } = useSiteConfig();
     return (
         <footer className="footer fade-in">
             <div className="container footer-grid">
                 <div className="footer-brand">
                     <div className="logo">
-                        <h1>SB<span>Store</span></h1>
+                        {logo_url
+                            ? <img src={logo_url.startsWith('http') ? logo_url : `${BASE}${logo_url}`} alt={app_name} style={{ maxHeight: 44, width: 'auto' }} />
+                            : <BrandLogo appName={app_name} size="md" />}
                     </div>
                     <p>The world's most premium curated shopping experience. Elevating your lifestyle, one product at a time.</p>
                     <div className="social-links">
@@ -36,7 +43,7 @@ const Footer: React.FC = () => {
                 </div>
 
                 <div className="footer-links">
-                    <h3>Sell on SB Store</h3>
+                    <h3>Sell on {app_name}</h3>
                     <ul>
                         <li><Link to="/become-seller">Become a Seller</Link></li>
                         <li><Link to="/seller/dashboard">Seller Dashboard</Link></li>

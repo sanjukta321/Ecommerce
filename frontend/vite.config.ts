@@ -28,9 +28,13 @@ export default defineConfig(({ mode }) => ({
   },
 
   server: {
-    // Proxy API calls to Frappe during development
+    // Proxy API calls and uploaded files to Frappe during development
     proxy: {
       '/api': {
+        target: 'http://localhost:8100',
+        changeOrigin: true,
+      },
+      '/files': {
         target: 'http://localhost:8100',
         changeOrigin: true,
       },

@@ -2,7 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink, useNavigate, Navigate } from 'react-router-dom';
 import { frappeApi } from '../../api/frappe';
+import { useSiteConfig } from '../../context/SiteConfigContext';
+import { BrandLogo } from '../BrandLogo';
 import '../../styles/Admin.css';
+
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -12,6 +16,7 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
   const navigate = useNavigate();
+  const { app_name, logo_url } = useSiteConfig();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
@@ -68,17 +73,18 @@ export default function AdminLayout({ children, title, subtitle }: AdminLayoutPr
 
         <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="admin-sidebar-logo">
-            <div className="admin-sidebar-logo-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                <path d="M2 17l10 5 10-5"/>
-                <path d="M2 12l10 5 10-5"/>
-              </svg>
-            </div>
-            <div>
-              <div className="admin-sidebar-logo-text">SB Admin</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', letterSpacing: '1px', textTransform: 'uppercase' }}>Control Panel</div>
-            </div>
+            {logo_url
+              ? <>
+                  <div className="admin-sidebar-logo-icon">
+                    <img src={logo_url.startsWith('http') ? logo_url : `${BASE}${logo_url}`} alt={app_name} style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 6 }} />
+                  </div>
+                  <div>
+                    <div className="admin-sidebar-logo-text">{app_name}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', letterSpacing: '1px', textTransform: 'uppercase' }}>Admin Panel</div>
+                  </div>
+                </>
+              : <div style={{ color: '#fff' }}><BrandLogo appName={app_name} size="sm" /></div>
+            }
           </div>
 
           <nav className="admin-nav">

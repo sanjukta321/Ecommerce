@@ -25,9 +25,6 @@ def get_context(context):
         context.asset_version = 1
 
     # Ensure the CSRF token is generated for this session.
-    # frappe.sessions.get_csrf_token() generates one if not already set,
-    # then the <!-- csrf_token --> placeholder in shop.html is replaced by
-    # Frappe's base_template_page with <script>frappe.csrf_token = "...";</script>
     try:
         import frappe.sessions as _sessions
         _sessions.get_csrf_token()
