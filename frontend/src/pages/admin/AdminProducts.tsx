@@ -25,11 +25,11 @@ interface FormData {
   stock_qty: string;
 }
 
-const ITEM_GROUPS = ['Electronics', 'Fashion', 'Furniture', 'Books', 'Sports', 'Accessories', 'Others'];
+interface ItemGroup { name: string; parent_item_group: string; is_group: number; }
 
 const BLANK_FORM: FormData = {
   item_name: '',
-  item_group: 'Electronics',
+  item_group: '',
   standard_rate: '',
   description: '',
   website_image: '',
@@ -51,6 +51,14 @@ export default function AdminProducts() {
   const [stockQty, setStockQty] = useState('');
   const [stockSaving, setStockSaving] = useState(false);
 
+  // Item groups — fetched from Frappe
+  const [itemGroups, setItemGroups] = useState<ItemGroup[]>([]);
+  const [showAddGroup, setShowAddGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupParent, setNewGroupParent] = useState('All Item Groups');
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [groupError, setGroupError] = useState('');
+
   const fetchItems = async () => {
     setLoading(true);
     setError('');
@@ -65,16 +73,49 @@ export default function AdminProducts() {
     }
   };
 
-  useEffect(() => { fetchItems(); }, []);
+  const fetchItemGroups = async () => {
+    try {
+      const data = await api<{ message: ItemGroup[] }>('/api/method/store_customizations.api.get_item_groups');
+      const groups = data.message || [];
+      setItemGroups(groups);
+      // Set default form group to first available
+      if (groups.length > 0 && !form.item_group) {
+        setForm(f => ({ ...f, item_group: groups[0].name }));
+      }
+    } catch {}
+  };
+
+  useEffect(() => { fetchItems(); fetchItemGroups(); }, []);
 
   const filtered = items.filter(i =>
     (i.item_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
+  const addItemGroup = async () => {
+    if (!newGroupName.trim()) { setGroupError('Group name is required.'); return; }
+    setAddingGroup(true); setGroupError('');
+    try {
+      await post('/api/method/store_customizations.api.create_item_group', {
+        group_name: newGroupName.trim(),
+        parent_item_group: newGroupParent || 'All Item Groups',
+      });
+      await fetchItemGroups();
+      setForm(f => ({ ...f, item_group: newGroupName.trim() }));
+      setShowAddGroup(false);
+      setNewGroupName('');
+      setNewGroupParent('All Item Groups');
+    } catch (e) {
+      setGroupError(e instanceof Error ? e.message : 'Failed to create group.');
+    } finally {
+      setAddingGroup(false);
+    }
+  };
+
   const openAdd = () => {
     setEditItem(null);
-    setForm(BLANK_FORM);
+    setForm({ ...BLANK_FORM, item_group: itemGroups[0]?.name || '' });
     setError('');
+    setShowAddGroup(false);
     setShowModal(true);
   };
 
@@ -82,7 +123,7 @@ export default function AdminProducts() {
     setEditItem(item);
     setForm({
       item_name: item.item_name || '',
-      item_group: item.item_group || 'Electronics',
+      item_group: item.item_group || itemGroups[0]?.name || '',
       standard_rate: String(item.selling_price ?? item.standard_rate ?? ''),
       description: item.description || '',
       website_image: item.image || '',
@@ -335,13 +376,29 @@ export default function AdminProducts() {
 
             <div className="admin-form-group">
               <label className="admin-form-label">Item Group</label>
-              <select
-                className="admin-form-select"
-                value={form.item_group}
-                onChange={e => updateField('item_group', e.target.value)}
-              >
-                {ITEM_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select
+                  className="admin-form-select"
+                  style={{ flex: 1 }}
+                  value={form.item_group}
+                  onChange={e => updateField('item_group', e.target.value)}
+                >
+                  {itemGroups.length === 0 && <option value="">— loading —</option>}
+                  {itemGroups.map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
+                </select>
+                <button
+                  type="button"
+                  title="Add new item group"
+                  style={{
+                    width: 36, height: 36, flexShrink: 0,
+                    borderRadius: 8, border: '1.5px solid #6366f1',
+                    background: '#6366f1', color: '#fff', fontSize: 22,
+                    cursor: 'pointer', fontWeight: 700, lineHeight: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  onClick={() => { setShowAddGroup(true); setGroupError(''); setNewGroupName(''); setNewGroupParent('All Item Groups'); }}
+                >+</button>
+              </div>
             </div>
 
             <div className="admin-form-group">
@@ -411,6 +468,88 @@ export default function AdminProducts() {
               <button className="admin-btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving...' : editItem ? 'Save Changes' : 'Add Product'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Item Group dialog — floats above everything */}
+      {showAddGroup && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 400,
+            background: 'rgba(15,23,42,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowAddGroup(false); }}
+        >
+          <div style={{
+            background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400,
+            padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#0f172a' }}>New Item Group</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddGroup(false)}
+                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#64748b', lineHeight: 1 }}
+              >×</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                  Group Name *
+                </label>
+                <input
+                  className="admin-form-input"
+                  placeholder="e.g. Clothing, Electronics…"
+                  value={newGroupName}
+                  autoFocus
+                  onChange={e => setNewGroupName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addItemGroup()}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                  Parent Group
+                </label>
+                <select
+                  className="admin-form-select"
+                  value={newGroupParent}
+                  onChange={e => setNewGroupParent(e.target.value)}
+                >
+                  <option value="All Item Groups">All Item Groups (root)</option>
+                  {itemGroups.map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
+                </select>
+              </div>
+
+              {groupError && (
+                <p style={{ margin: 0, color: '#dc2626', fontSize: 13, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>
+                  {groupError}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
+                  type="button"
+                  className="admin-btn-primary"
+                  style={{ flex: 1, padding: '10px 0' }}
+                  disabled={addingGroup}
+                  onClick={addItemGroup}
+                >
+                  {addingGroup ? 'Saving…' : 'Add Group'}
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn-secondary"
+                  style={{ padding: '10px 20px' }}
+                  onClick={() => setShowAddGroup(false)}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

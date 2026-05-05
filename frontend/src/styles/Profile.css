@@ -329,6 +329,530 @@
     color: var(--text-dim);
 }
 
+/* ── Gift Card Modal ────────────────────────────────────────── */
+.gc-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 30000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    animation: qom-fade-in 0.22s ease;
+}
+
+.gc-modal {
+    background: var(--bg-main);
+    width: 100%;
+    max-width: 420px;
+    border-radius: 20px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.3);
+    animation: qom-slide-up 0.28s cubic-bezier(0.32,0.72,0,1);
+    overflow: hidden;
+}
+
+.gc-modal--wide { max-width: 500px; }
+
+.gc-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.gc-modal-header h3 { font-size: 17px; font-weight: 800; margin: 0; color: var(--text-main); }
+
+.gc-modal-close {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: var(--glass);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.18s, color 0.18s;
+}
+
+.gc-modal-close:hover { background: rgba(220,38,38,0.12); color: #dc2626; }
+
+.gc-modal-body { padding: 20px 24px 24px; }
+
+.gc-card-visual-mini {
+    text-align: center;
+    padding: 16px;
+    background: var(--glass);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    border: 1px solid var(--glass-border);
+}
+
+.gc-card-icon { font-size: 36px; margin-bottom: 6px; }
+.gc-card-visual-mini p { font-size: 13px; color: var(--text-dim); margin: 0; }
+
+.gc-check-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: opacity 0.18s, transform 0.12s;
+    letter-spacing: 0.02em;
+}
+
+.gc-check-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+.gc-check-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.gc-btn-spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: qom-spin 0.7s linear infinite;
+    display: inline-block;
+}
+
+.gc-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: rgba(220,38,38,0.1);
+    border: 1px solid rgba(220,38,38,0.25);
+    color: #dc2626;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.gc-balance-result {
+    text-align: center;
+    padding: 24px 0 8px;
+}
+
+.gc-result-icon { font-size: 48px; margin-bottom: 12px; }
+.gc-result-label { font-size: 13px; font-weight: 600; color: var(--text-dim); margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.gc-result-amount { font-size: 40px; font-weight: 900; color: var(--accent); margin: 0 0 8px; }
+.gc-result-expiry { font-size: 12px; color: var(--text-dim); margin: 0; }
+
+/* Denominations */
+.gc-denominations {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.gc-denom-btn {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1.5px solid var(--glass-border);
+    background: transparent;
+    color: var(--text-main);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+}
+
+.gc-denom-btn:hover { border-color: var(--accent); color: var(--accent); }
+.gc-denom-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(var(--accent-rgb,180,140,80),0.35); }
+
+.gc-step-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 12px; }
+
+.gc-amount-pill {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 20px;
+    background: rgba(var(--accent-rgb,180,140,80),0.12);
+    border: 1px solid rgba(var(--accent-rgb,180,140,80),0.3);
+    font-size: 13px;
+    color: var(--accent);
+}
+
+/* Purchased card display */
+.gc-purchased-card {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border-radius: 16px;
+    padding: 20px 22px 18px;
+    position: relative;
+    overflow: hidden;
+}
+
+.gc-purchased-card::before {
+    content: '';
+    position: absolute;
+    top: -50px; right: -50px;
+    width: 150px; height: 150px;
+    background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+}
+
+.gc-purchased-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; color: rgba(255,255,255,0.7); font-weight: 600; }
+.gc-purchased-amount { font-size: 20px; font-weight: 900; color: #fff; }
+
+.gc-purchased-number {
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    color: #fff;
+    padding: 10px 0;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.gc-copy-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.18s;
+    flex-shrink: 0;
+}
+
+.gc-copy-btn:hover { background: rgba(255,255,255,0.3); }
+
+.gc-purchased-bottom { display: flex; gap: 20px; }
+.gc-purchased-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.5); margin: 0 0 3px; }
+.gc-purchased-val { font-size: 16px; font-weight: 700; color: #fff; margin: 0; }
+
+.gc-success-wrap { display: flex; flex-direction: column; }
+
+/* ── Gift Card Actions ───────────────────────────────────────── */
+.gc-actions-row {
+    display: flex;
+    gap: 14px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.gc-action-btn {
+    flex: 1;
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 18px 20px;
+    border-radius: 14px;
+    border: 1.5px solid var(--glass-border);
+    background: var(--glass);
+    cursor: pointer;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.12s;
+    text-align: left;
+}
+
+.gc-action-btn:hover {
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px rgba(var(--accent-rgb,180,140,80),0.12);
+    transform: translateY(-2px);
+}
+
+.gc-action-icon { font-size: 24px; margin-bottom: 4px; }
+.gc-action-label { font-size: 14px; font-weight: 700; color: var(--text-main); }
+.gc-action-sub { font-size: 11px; color: var(--text-dim); }
+
+/* ── My Gift Cards list ──────────────────────────────────────── */
+.gc-my-cards { display: flex; flex-direction: column; gap: 12px; max-width: 480px; }
+
+.gc-my-card {
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+    border-radius: 14px;
+    padding: 16px 20px 14px;
+    position: relative;
+    overflow: hidden;
+}
+
+.gc-my-card.used { opacity: 0.55; filter: grayscale(0.4); }
+
+.gc-my-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.65);
+}
+
+.gc-my-card-badge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.gc-my-card-badge.active { background: rgba(34,197,94,0.25); color: #4ade80; }
+.gc-my-card-badge.used   { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.45); }
+
+.gc-my-card-number {
+    font-family: 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.85);
+    margin: 0 0 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.gc-my-card-bottom { display: flex; gap: 20px; flex-wrap: wrap; }
+.gc-my-card-bal { font-size: 18px; font-weight: 900; color: #fff; margin: 0; }
+
+/* ── Gift Cards ─────────────────────────────────────────────── */
+.gc-balance-card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 24px 28px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+    max-width: 380px;
+    box-shadow: 0 8px 32px rgba(var(--accent-rgb, 180,140,80), 0.35);
+}
+
+.gc-balance-icon { font-size: 36px; }
+
+.gc-balance-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.7); margin: 0 0 4px; }
+.gc-balance-amount { font-size: 28px; font-weight: 900; color: #fff; margin: 0 0 2px; }
+.gc-balance-pts { font-size: 12px; color: rgba(255,255,255,0.65); margin: 0; }
+
+.gc-redeem-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.gc-redeem-row .pan-input { flex: 1; }
+
+/* ── Saved Payments list ─────────────────────────────────────── */
+.payment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 480px;
+}
+
+.payment-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 1.5px solid var(--glass-border);
+    background: var(--input-bg);
+}
+
+.upi-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.payment-item-info { flex: 1; }
+.payment-item-main { font-size: 14px; font-weight: 700; color: var(--text-main); margin: 0 0 2px; }
+.payment-item-sub  { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 0; }
+
+/* ── Bank Cards ──────────────────────────────────────────────── */
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    max-width: 640px;
+    margin-bottom: 20px;
+}
+
+.bank-card {
+    border-radius: 18px;
+    padding: 20px 22px 18px;
+    position: relative;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    overflow: hidden;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.bank-card::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    pointer-events: none;
+}
+
+.bank-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.bank-card-type { font-size: 14px; font-weight: 900; color: #fff; letter-spacing: 0.04em; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.bank-card-number { font-size: 16px; font-weight: 700; letter-spacing: 0.14em; color: rgba(255,255,255,0.9); font-family: 'Courier New', monospace; margin: 14px 0 12px; }
+
+.bank-card-bottom { display: flex; gap: 24px; }
+.bank-card-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.55); margin: 0 0 2px; }
+.bank-card-value { font-size: 13px; font-weight: 700; color: #fff; margin: 0; }
+
+.bank-card-remove {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    transition: background 0.18s;
+}
+
+.bank-card-remove:hover { background: rgba(239,68,68,0.8); }
+
+/* ── Coupons ─────────────────────────────────────────────────── */
+.coupons-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 640px;
+}
+
+.coupon-card {
+    display: flex;
+    border-radius: 14px;
+    border: 1.5px dashed var(--glass-border);
+    overflow: hidden;
+    background: var(--input-bg);
+    transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.coupon-card:hover { border-color: var(--accent); box-shadow: 0 4px 20px rgba(var(--accent-rgb,180,140,80),0.12); }
+
+.coupon-left {
+    width: 130px;
+    flex-shrink: 0;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 12px;
+    cursor: pointer;
+    position: relative;
+}
+
+.coupon-left::before, .coupon-left::after {
+    content: '';
+    position: absolute;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--bg-main);
+    top: 50%;
+}
+
+.coupon-left::before { right: -9px; transform: translateY(-50%); }
+.coupon-left::after  { left: -9px; transform: translateY(-50%); }
+
+.coupon-code-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.coupon-code { font-size: 15px; font-weight: 900; color: #fff; letter-spacing: 0.08em; word-break: break-all; text-align: center; }
+.coupon-copy { font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: 0.1em; }
+
+.coupon-right { flex: 1; padding: 14px 18px; }
+.coupon-name { font-size: 14px; font-weight: 700; color: var(--text-main); margin: 0 0 4px; }
+.coupon-desc { font-size: 12px; color: var(--text-dim); margin: 0 0 10px; line-height: 1.5; }
+.coupon-meta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.coupon-expiry { font-size: 11px; font-weight: 700; color: var(--text-dim); }
+.coupon-expiry.urgent { color: #dc2626; }
+.coupon-uses { font-size: 11px; font-weight: 600; color: var(--text-dim); padding: 2px 8px; border-radius: 10px; background: var(--glass); border: 1px solid var(--glass-border); }
+
+/* ── Reviews ─────────────────────────────────────────────────── */
+.review-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--glass-border);
+    margin-bottom: 20px;
+}
+
+.review-tab {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.18s, border-color 0.18s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.review-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.review-tab-badge { font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 10px; background: var(--accent); color: #fff; }
+
+.review-form-wrap {
+    background: var(--glass);
+    border: 1.5px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    max-width: 560px;
+    margin-bottom: 20px;
+}
+
+.review-form-item { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--glass-border); }
+.review-form-img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; }
+.review-rating-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.review-textarea { width: 100%; resize: vertical; min-height: 100px; font-family: inherit; box-sizing: border-box; }
+
+.reviewable-list { display: flex; flex-direction: column; gap: 12px; max-width: 560px; }
+.reviewable-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; border: 1.5px solid var(--glass-border); background: var(--input-bg); }
+.reviewable-img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; flex-shrink: 0; }
+.reviewable-placeholder { display: flex; align-items: center; justify-content: center; background: var(--glass); font-size: 20px; }
+.reviewable-info { flex: 1; }
+.reviewable-name { font-size: 14px; font-weight: 600; color: var(--text-main); margin: 0 0 6px; }
+
+.reviews-done-list { display: flex; flex-direction: column; gap: 16px; max-width: 560px; }
+.review-done-card { padding: 18px 20px; border-radius: 12px; border: 1.5px solid var(--glass-border); background: var(--input-bg); }
+.review-done-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.review-done-img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; }
+.review-done-item { font-size: 14px; font-weight: 700; color: var(--text-main); margin: 0 0 4px; }
+.review-done-title { font-size: 14px; font-weight: 600; color: var(--text-main); margin: 8px 0 4px; font-style: italic; }
+.review-done-body { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 0 0 8px; }
+.review-done-date { font-size: 11px; color: var(--text-dim); margin: 0; }
+
+/* ── Notifications ───────────────────────────────────────────── */
+.notif-list { display: flex; flex-direction: column; gap: 0; max-width: 560px; }
+.notif-row { display: flex; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--glass-border); }
+.notif-row:last-child { border-bottom: none; }
+.notif-icon { flex-shrink: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
+.notif-text { flex: 1; }
+.notif-label { font-size: 15px; font-weight: 600; color: var(--text-main); margin: 0 0 3px; }
+.notif-desc  { font-size: 12px; color: var(--text-dim); margin: 0; line-height: 1.5; }
+
 /* ── PAN Card Visual ────────────────────────────────────────── */
 .pan-card-visual {
     width: 100%;

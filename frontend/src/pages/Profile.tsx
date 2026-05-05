@@ -3,6 +3,12 @@ import '../styles/Profile.css';
 import Footer from '../components/Footer';
 import { useNavigate } from 'react-router-dom';
 import { api, post } from '../services/client';
+import GiftCardsSection from './profile/GiftCardsSection';
+import SavedUPISection from './profile/SavedUPISection';
+import SavedCardsSection from './profile/SavedCardsSection';
+import CouponsSection from './profile/CouponsSection';
+import ReviewsSection from './profile/ReviewsSection';
+import NotificationsSection from './profile/NotificationsSection';
 
 interface ProfileProps { onLogout: () => void; }
 
@@ -18,7 +24,7 @@ interface AddressData {
     is_primary_address: number; is_shipping_address: number;
 }
 
-type Section = 'profile' | 'addresses' | 'pan';
+type Section = 'profile' | 'addresses' | 'pan' | 'gift-cards' | 'saved-upi' | 'saved-cards' | 'coupons' | 'reviews' | 'notifications';
 
 const EMPTY_USER: UserData = { first_name: '', last_name: '', full_name: '', email: '', mobile_no: '', gender: '' };
 const EMPTY_ADDR = { address_type: 'Home', address_line1: '', address_line2: '', city: '', state: '', pincode: '', country: 'India' };
@@ -45,6 +51,20 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
     const [panEditing, setPanEditing] = useState(false);
     const [panSaving, setPanSaving] = useState(false);
     const [panMsg, setPanMsg] = useState('');
+
+    // ── Payments state ────────────────────────────────────────
+    const [loyaltyBalance, setLoyaltyBalance] = useState({ points: 0, value: 0 });
+    const [savedUpi, setSavedUpi] = useState<{ id: string; upi: string }[]>([]);
+    const [savedCards, setSavedCards] = useState<any[]>([]);
+    const [paymentsLoaded, setPaymentsLoaded] = useState(false);
+
+    // ── My Stuff state ────────────────────────────────────────
+    const [coupons, setCoupons] = useState<any[]>([]);
+    const [couponsLoading, setCouponsLoading] = useState(false);
+    const [reviews, setReviews] = useState<any[]>([]);
+    const [reviewable, setReviewable] = useState<any[]>([]);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
+    const [notifPrefs, setNotifPrefs] = useState({ enable_email: true, enable_mention: true, enable_assignment: true, enable_share: true });
 
     // ── Address state ──────────────────────────────────────────
     const [addresses, setAddresses] = useState<AddressData[]>([]);
@@ -189,6 +209,48 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         } finally { setAddrSaving(false); }
     };
 
+    // ── Section lazy-load ─────────────────────────────────────
+    const loadPayments = () => {
+        if (paymentsLoaded) return;
+        setPaymentsLoaded(true);
+        api<{ message: { points: number; value: number } }>('/api/method/store_customizations.api.get_loyalty_balance')
+            .then(r => setLoyaltyBalance(r.message || { points: 0, value: 0 })).catch(() => {});
+        api<{ message: { upi: any[]; cards: any[] } }>('/api/method/store_customizations.api.get_saved_payments')
+            .then(r => { setSavedUpi(r.message?.upi || []); setSavedCards(r.message?.cards || []); }).catch(() => {});
+    };
+
+    const loadCoupons = () => {
+        if (coupons.length || couponsLoading) return;
+        setCouponsLoading(true);
+        api<{ message: any[] }>('/api/method/store_customizations.api.get_user_coupons')
+            .then(r => setCoupons(r.message || [])).catch(() => {}).finally(() => setCouponsLoading(false));
+    };
+
+    const loadReviews = () => {
+        if (reviews.length || reviewsLoading) return;
+        setReviewsLoading(true);
+        Promise.all([
+            api<{ message: any[] }>('/api/method/store_customizations.api.get_user_reviews'),
+            api<{ message: any[] }>('/api/method/store_customizations.api.get_reviewable_items'),
+        ]).then(([rv, ri]) => {
+            setReviews(rv.message || []);
+            setReviewable(ri.message || []);
+        }).catch(() => {}).finally(() => setReviewsLoading(false));
+    };
+
+    const loadNotifications = () => {
+        api<{ message: typeof notifPrefs }>('/api/method/store_customizations.api.get_notification_settings')
+            .then(r => { if (r.message) setNotifPrefs(r.message); }).catch(() => {});
+    };
+
+    const goToSection = (section: Section) => {
+        setActiveSection(section);
+        if (section === 'gift-cards' || section === 'saved-upi' || section === 'saved-cards') loadPayments();
+        if (section === 'coupons') loadCoupons();
+        if (section === 'reviews') loadReviews();
+        if (section === 'notifications') loadNotifications();
+    };
+
     // ── PAN helpers ───────────────────────────────────────────
     const startPanEdit = () => {
         setPanForm({ pan_number: panData.pan_number, pan_holder_name: panData.pan_holder_name, pan_dob: panData.pan_dob });
@@ -261,7 +323,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                             </div>
                             <ul className="group-links">
                                 <li className={activeSection === 'profile' ? 'active' : ''}
-                                    onClick={() => setActiveSection('profile')}>
+                                    onClick={() => goToSection('profile')}>
                                     Profile Information
                                 </li>
                                 <li className={activeSection === 'addresses' ? 'active' : ''}
@@ -284,26 +346,39 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                         </div>
 
                         <div className="menu-group">
-                            <div className="group-header" onClick={() => showNavToast('Payments — coming soon')}>
+                            <div className="group-header" onClick={() => goToSection('gift-cards')}>
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" /></svg>
                                 <span>PAYMENTS</span>
+                                <svg className="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
                             </div>
                             <ul className="group-links">
-                                <li onClick={() => showNavToast('Gift Cards — coming soon')}>Gift Cards <span className="balance">₹0</span></li>
-                                <li onClick={() => showNavToast('Saved UPI — coming soon')}>Saved UPI</li>
-                                <li onClick={() => showNavToast('Saved Cards — coming soon')}>Saved Cards</li>
+                                <li className={activeSection === 'gift-cards' ? 'active' : ''} onClick={() => goToSection('gift-cards')}>
+                                    Gift Cards <span className="balance">₹{loyaltyBalance.value.toLocaleString('en-IN')}</span>
+                                </li>
+                                <li className={activeSection === 'saved-upi' ? 'active' : ''} onClick={() => goToSection('saved-upi')}>
+                                    Saved UPI
+                                    {savedUpi.length > 0 && <span style={{ marginLeft: 6, fontSize: 11, background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>{savedUpi.length}</span>}
+                                </li>
+                                <li className={activeSection === 'saved-cards' ? 'active' : ''} onClick={() => goToSection('saved-cards')}>
+                                    Saved Cards
+                                    {savedCards.length > 0 && <span style={{ marginLeft: 6, fontSize: 11, background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>{savedCards.length}</span>}
+                                </li>
                             </ul>
                         </div>
 
                         <div className="menu-group">
-                            <div className="group-header" onClick={() => showNavToast('My Stuff — coming soon')}>
+                            <div className="group-header" onClick={() => goToSection('coupons')}>
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" /></svg>
                                 <span>MY STUFF</span>
+                                <svg className="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
                             </div>
                             <ul className="group-links">
-                                <li onClick={() => showNavToast('My Coupons — coming soon')}>My Coupons</li>
-                                <li onClick={() => showNavToast('My Reviews & Ratings — coming soon')}>My Reviews &amp; Ratings</li>
-                                <li onClick={() => showNavToast('All Notifications — coming soon')}>All Notifications</li>
+                                <li className={activeSection === 'coupons' ? 'active' : ''} onClick={() => goToSection('coupons')}>My Coupons</li>
+                                <li className={activeSection === 'reviews' ? 'active' : ''} onClick={() => goToSection('reviews')}>
+                                    My Reviews &amp; Ratings
+                                    {reviewable.length > 0 && <span style={{ marginLeft: 6, fontSize: 11, background: '#f59e0b', color: '#fff', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>{reviewable.length}</span>}
+                                </li>
+                                <li className={activeSection === 'notifications' ? 'active' : ''} onClick={() => goToSection('notifications')}>All Notifications</li>
                                 <li onClick={() => navigate('/wishlist')}>My Wishlist</li>
                             </ul>
                         </div>
@@ -573,6 +648,35 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                                 <span>PAN details are required for transactions above ₹50,000 and for availing GST benefits. Your data is encrypted and stored securely.</span>
                             </div>
                         </section>
+                    )}
+
+                    {/* ── Payments sections ── */}
+                    {activeSection === 'gift-cards' && (
+                        <GiftCardsSection points={loyaltyBalance.points} value={loyaltyBalance.value} />
+                    )}
+                    {activeSection === 'saved-upi' && (
+                        <SavedUPISection items={savedUpi} onChange={setSavedUpi} />
+                    )}
+                    {activeSection === 'saved-cards' && (
+                        <SavedCardsSection items={savedCards} onChange={setSavedCards} />
+                    )}
+
+                    {/* ── My Stuff sections ── */}
+                    {activeSection === 'coupons' && (
+                        <CouponsSection coupons={coupons} loading={couponsLoading} />
+                    )}
+                    {activeSection === 'reviews' && (
+                        <ReviewsSection
+                            reviews={reviews}
+                            reviewable={reviewable}
+                            onReviewSaved={r => {
+                                setReviews(prev => [r, ...prev]);
+                                setReviewable(prev => prev.filter(i => i.item_code !== r.item));
+                            }}
+                        />
+                    )}
+                    {activeSection === 'notifications' && (
+                        <NotificationsSection prefs={notifPrefs} onChange={setNotifPrefs} />
                     )}
 
                     {activeSection === 'addresses' && (

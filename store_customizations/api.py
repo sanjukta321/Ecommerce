@@ -391,6 +391,474 @@ def get_csrf_token():
 
 
 # ─────────────────────────────────────────────
+#  LOYALTY / GIFT CARDS
+# ─────────────────────────────────────────────
+
+import random as _random
+import string as _string
+
+
+def _generate_gift_card_number():
+    """Generate a 16-digit gift card number in groups of 4."""
+    digits = ''.join([str(_random.randint(0, 9)) for _ in range(16)])
+    return '-'.join([digits[i:i+4] for i in range(0, 16, 4)])
+
+
+def _generate_pin():
+    return ''.join([str(_random.randint(0, 9)) for _ in range(4)])
+
+
+@frappe.whitelist()
+def get_loyalty_balance():
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    customer_names = _get_all_customer_names_for_user(user)
+    if not customer_names:
+        return {"points": 0, "value": 0.0}
+
+    rows = frappe.db.get_all(
+        "Loyalty Point Entry",
+        filters={"customer": ["in", customer_names], "docstatus": 1},
+        fields=["loyalty_points"],
+    )
+    total = sum(r.loyalty_points for r in rows)
+    return {"points": total, "value": float(total)}
+
+
+@frappe.whitelist()
+def get_my_gift_cards():
+    """Return gift cards purchased by or assigned to the current user."""
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    cards = frappe.get_all(
+        "Coupon Code",
+        filters={"is_gift_card": 1, "purchased_by": user, "docstatus": ["!=", 2]},
+        fields=[
+            "coupon_code", "gift_card_balance", "valid_upto",
+            "recipient_name", "recipient_email", "gift_message",
+            "used", "maximum_use",
+        ],
+        order_by="creation desc",
+    )
+    return cards
+
+
+@frappe.whitelist(methods=["POST"])
+def buy_gift_card(amount, recipient_name="", recipient_email="", gift_message=""):
+    """Create a new gift card Coupon Code and return the card number + PIN."""
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    amount = float(amount or 0)
+    if amount <= 0:
+        frappe.throw("Invalid gift card amount")
+
+    card_number = _generate_gift_card_number()
+    pin = _generate_pin()
+
+    today = frappe.utils.today()
+    valid_upto = frappe.utils.add_months(today, 12)  # valid for 1 year
+
+    doc = frappe.new_doc("Coupon Code")
+    doc.coupon_name = f"Gift Card {card_number}"
+    doc.coupon_code = card_number
+    doc.coupon_type = "Gift Card"
+    doc.is_gift_card = 1
+    doc.gift_card_pin = pin
+    doc.gift_card_balance = amount
+    doc.valid_from = today
+    doc.valid_upto = valid_upto
+    doc.maximum_use = 1
+    doc.purchased_by = user
+    doc.recipient_name = recipient_name or ""
+    doc.recipient_email = recipient_email or ""
+    doc.gift_message = gift_message or ""
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Send email to recipient if provided
+    if recipient_email:
+        try:
+            frappe.sendmail(
+                recipients=[recipient_email],
+                subject=f"You've received a ₹{int(amount):,} Gift Card from SB Store!",
+                message=f"""
+                    <h2>🎁 Your Gift Card</h2>
+                    <p>Hi {recipient_name or 'there'},</p>
+                    <p>You've received a gift card worth <strong>₹{int(amount):,}</strong>!</p>
+                    <p><strong>Card Number:</strong> {card_number}<br>
+                    <strong>PIN:</strong> {pin}</p>
+                    {f'<p><em>"{gift_message}"</em></p>' if gift_message else ''}
+                    <p>Valid until {valid_upto}. Redeem at SB Store checkout.</p>
+                """,
+            )
+        except Exception:
+            pass  # Don't fail the purchase if email fails
+
+    return {
+        "card_number": card_number,
+        "pin": pin,
+        "amount": amount,
+        "valid_upto": valid_upto,
+        "recipient_name": recipient_name,
+    }
+
+
+@frappe.whitelist()
+def check_gift_card_balance(card_number, pin):
+    """Verify PIN and return the remaining balance on a gift card."""
+    if not card_number or not pin:
+        frappe.throw("Card number and PIN are required")
+
+    card_number = card_number.strip()
+    pin = pin.strip()
+
+    doc_name = frappe.db.get_value(
+        "Coupon Code",
+        {"coupon_code": card_number, "is_gift_card": 1, "docstatus": ["!=", 2]},
+        "name",
+    )
+    if not doc_name:
+        frappe.throw("Gift card not found. Please check the card number.")
+
+    doc = frappe.get_doc("Coupon Code", doc_name)
+    if doc.gift_card_pin != pin:
+        frappe.throw("Incorrect PIN. Please try again.")
+
+    today = frappe.utils.getdate(frappe.utils.today())
+    if doc.valid_upto and frappe.utils.getdate(doc.valid_upto) < today:
+        frappe.throw("This gift card has expired.")
+
+    return {
+        "card_number": card_number,
+        "balance": float(doc.gift_card_balance or 0),
+        "valid_upto": str(doc.valid_upto or ""),
+        "is_used": bool(doc.used),
+    }
+
+
+# ─────────────────────────────────────────────
+#  SAVED PAYMENTS  (UPI + Cards)
+# ─────────────────────────────────────────────
+
+import json as _json
+
+
+def _load_json_field(customer_name, fieldname):
+    raw = frappe.db.get_value("Customer", customer_name, fieldname) or "[]"
+    try:
+        return _json.loads(raw)
+    except Exception:
+        return []
+
+
+def _save_json_field(customer_name, fieldname, data):
+    frappe.db.set_value("Customer", customer_name, fieldname, _json.dumps(data))
+    frappe.db.commit()
+
+
+@frappe.whitelist()
+def get_saved_payments():
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    customer_name = _get_primary_customer_for_user(user)
+    if not customer_name:
+        return {"upi": [], "cards": []}
+    return {
+        "upi": _load_json_field(customer_name, "saved_upi_json"),
+        "cards": _load_json_field(customer_name, "saved_cards_json"),
+    }
+
+
+@frappe.whitelist(methods=["POST"])
+def add_upi(upi_id):
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    upi_id = (upi_id or "").strip().lower()
+    if not upi_id or "@" not in upi_id:
+        frappe.throw("Invalid UPI ID format")
+    customer_name = _get_primary_customer_for_user(user)
+    if not customer_name:
+        frappe.throw("No customer account found")
+    items = _load_json_field(customer_name, "saved_upi_json")
+    if any(u["upi"] == upi_id for u in items):
+        frappe.throw("This UPI ID is already saved")
+    import uuid
+    items.append({"id": str(uuid.uuid4())[:8], "upi": upi_id})
+    _save_json_field(customer_name, "saved_upi_json", items)
+    return items
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_upi(upi_id):
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    customer_name = _get_primary_customer_for_user(user)
+    if not customer_name:
+        frappe.throw("No customer account found")
+    items = [u for u in _load_json_field(customer_name, "saved_upi_json") if u.get("id") != upi_id]
+    _save_json_field(customer_name, "saved_upi_json", items)
+    return items
+
+
+@frappe.whitelist(methods=["POST"])
+def add_card(holder_name, last4, card_type, expiry_month, expiry_year):
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    if not last4 or len(str(last4)) != 4:
+        frappe.throw("Last 4 digits of card are required")
+    customer_name = _get_primary_customer_for_user(user)
+    if not customer_name:
+        frappe.throw("No customer account found")
+    import uuid
+    items = _load_json_field(customer_name, "saved_cards_json")
+    items.append({
+        "id": str(uuid.uuid4())[:8],
+        "holder_name": holder_name or "",
+        "last4": str(last4),
+        "card_type": card_type or "Visa",
+        "expiry_month": str(expiry_month),
+        "expiry_year": str(expiry_year),
+    })
+    _save_json_field(customer_name, "saved_cards_json", items)
+    return items
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_card(card_id):
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    customer_name = _get_primary_customer_for_user(user)
+    if not customer_name:
+        frappe.throw("No customer account found")
+    items = [c for c in _load_json_field(customer_name, "saved_cards_json") if c.get("id") != card_id]
+    _save_json_field(customer_name, "saved_cards_json", items)
+    return items
+
+
+# ─────────────────────────────────────────────
+#  COUPONS
+# ─────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_user_coupons():
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    customer_names = _get_all_customer_names_for_user(user)
+    today = frappe.utils.today()
+
+    filters = [
+        ["valid_upto", ">=", today],
+        ["docstatus", "!=", 2],
+    ]
+    coupons = frappe.get_all(
+        "Coupon Code",
+        filters=filters,
+        or_filters=[
+            ["customer", "in", customer_names + ["", None]],
+        ],
+        fields=["coupon_code", "coupon_name", "coupon_type", "valid_from", "valid_upto",
+                "maximum_use", "used", "description"],
+        order_by="valid_upto asc",
+    )
+    return coupons
+
+
+# ─────────────────────────────────────────────
+#  REVIEWS & RATINGS
+# ─────────────────────────────────────────────
+
+@frappe.whitelist(allow_guest=True)
+def get_item_reviews(item_code):
+    """Return all submitted reviews for a given item, its parent template, and all sibling variants."""
+    # Resolve the template root
+    parent_item = frappe.db.get_value("Item", item_code, "variant_of") or item_code
+    is_template = frappe.db.get_value("Item", parent_item, "has_variants")
+
+    # Collect all related item codes: self + parent + all variants of the template
+    item_codes = {item_code, parent_item}
+    if is_template:
+        variants = frappe.db.get_all("Item", filters={"variant_of": parent_item}, pluck="name")
+        item_codes.update(variants)
+    item_codes = list(item_codes)
+
+    reviews = frappe.get_all(
+        "Item Review",
+        filters={"item": ["in", item_codes]},
+        fields=["name", "item", "user", "customer", "rating", "review_title", "comment", "creation"],
+        order_by="creation desc",
+        limit=50,
+    )
+    result = []
+    for r in reviews:
+        # Mask the user email — show only the display name
+        display_name = frappe.db.get_value("User", r["user"], "full_name") or r["user"].split("@")[0]
+        result.append({
+            "name":         r["name"],
+            "reviewer":     display_name,
+            "rating":       round(float(r["rating"] or 0) * 5, 1),  # convert 0-1 → 0-5
+            "review_title": r["review_title"] or "",
+            "comment":      r["comment"] or "",
+            "creation":     str(r["creation"])[:10],
+        })
+
+    avg = round(sum(r["rating"] for r in result) / len(result), 1) if result else 0
+    return {"reviews": result, "avg_rating": avg, "count": len(result)}
+
+
+@frappe.whitelist()
+def get_user_reviews():
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    reviews = frappe.get_all(
+        "Item Review",
+        filters={"user": user},
+        fields=["name", "item", "website_item", "rating", "review_title", "comment", "creation"],
+        order_by="creation desc",
+    )
+    # Attach item_name
+    for r in reviews:
+        r["item_name"] = frappe.db.get_value("Item", r["item"], "item_name") or r["item"]
+        r["item_image"] = frappe.db.get_value("Item", r["item"], "image") or ""
+        r["rating"] = round(float(r["rating"] or 0) * 5, 1)  # DB stores 0-1, UI needs 1-5
+    return reviews
+
+
+@frappe.whitelist()
+def get_reviewable_items():
+    """Return delivered order items the user can still review."""
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    customer_names = _get_all_customer_names_for_user(user)
+    if not customer_names:
+        return []
+
+    already_reviewed = set(
+        frappe.db.get_all("Item Review", {"user": user}, pluck="item")
+    )
+
+    orders = frappe.db.get_all(
+        "Sales Order",
+        filters={"customer": ["in", customer_names], "status": ["in", ["Completed", "To Deliver and Bill", "To Bill"]]},
+        pluck="name",
+        limit=50,
+    )
+    if not orders:
+        return []
+
+    items_raw = frappe.db.get_all(
+        "Sales Order Item",
+        filters={"parent": ["in", orders]},
+        fields=["item_code", "item_name", "image"],
+    )
+
+    seen = set()
+    result = []
+    for row in items_raw:
+        code = row["item_code"]
+        if code in seen or code in already_reviewed:
+            continue
+        seen.add(code)
+        result.append({
+            "item_code": code,
+            "item_name": row["item_name"] or code,
+            "image": row.get("image") or frappe.db.get_value("Item", code, "image") or "",
+        })
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def save_item_review(item_code, rating, title, body):
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    rating = float(rating or 0)
+    if not (1 <= rating <= 5):
+        frappe.throw("Rating must be between 1 and 5")
+
+    customer_name = _get_primary_customer_for_user(user)
+
+    # Update existing review if any
+    existing = frappe.db.get_value("Item Review", {"user": user, "item": item_code}, "name")
+    if existing:
+        doc = frappe.get_doc("Item Review", existing)
+    else:
+        doc = frappe.new_doc("Item Review")
+        doc.user = user
+        doc.item = item_code
+        doc.customer = customer_name or ""
+        website_item = frappe.db.get_value("Website Item", {"item_code": item_code}, "name")
+        if not website_item:
+            # For item variants, try the parent item
+            parent_item = frappe.db.get_value("Item", item_code, "variant_of")
+            if parent_item:
+                website_item = frappe.db.get_value("Website Item", {"item_code": parent_item}, "name")
+        if website_item:
+            doc.website_item = website_item
+
+    doc.rating = rating / 5  # Frappe stores 0-1 scale
+    doc.review_title = title or ""
+    doc.comment = body or ""
+    doc.flags.ignore_mandatory = True
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"name": doc.name, "item": item_code}
+
+
+# ─────────────────────────────────────────────
+#  NOTIFICATIONS
+# ─────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_notification_settings():
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    if frappe.db.exists("Notification Settings", user):
+        doc = frappe.get_doc("Notification Settings", user)
+    else:
+        doc = frappe.new_doc("Notification Settings")
+    return {
+        "enable_email":      bool(doc.enable_email_notifications),
+        "enable_mention":    bool(doc.enable_email_mention),
+        "enable_assignment": bool(doc.enable_email_assignment),
+        "enable_share":      bool(doc.enable_email_share),
+    }
+
+
+@frappe.whitelist(methods=["POST"])
+def save_notification_settings(enable_email=1, enable_mention=1, enable_assignment=1, enable_share=1):
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+    if frappe.db.exists("Notification Settings", user):
+        doc = frappe.get_doc("Notification Settings", user)
+    else:
+        doc = frappe.new_doc("Notification Settings")
+        doc.name = user
+    doc.enable_email_notifications = int(enable_email)
+    doc.enable_email_mention = int(enable_mention)
+    doc.enable_email_assignment = int(enable_assignment)
+    doc.enable_email_share = int(enable_share)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return get_notification_settings()
+
+
+# ─────────────────────────────────────────────
 #  CUSTOMER  (registration)
 # ─────────────────────────────────────────────
 
@@ -909,7 +1377,7 @@ def _order_ecom_status(so_name, so_status):
         )
         if si_data and si_data.docstatus == 1 and (si_data.outstanding_amount or 0) <= 0:
             payment_status = "Paid"
-
+            
     if payment_status == "Paid":
         ecom_status = "Completed"
     elif dn_name:
@@ -924,6 +1392,7 @@ def _order_ecom_status(so_name, so_status):
         "payment_status": payment_status,
         "sales_invoice":  si_name,
         "delivery_note":  dn_name,
+        
     }
 
 
@@ -1083,8 +1552,38 @@ def collect_cod_payment(sales_invoice):
 #  These should check for System Manager role.
 # ─────────────────────────────────────────────
 
-# Example — uncomment and customise when needed:
-#
+@frappe.whitelist()
+def get_item_groups():
+    """Return all non-root item groups for dropdowns."""
+    groups = frappe.get_all(
+        "Item Group",
+        filters={"name": ["!=", "All Item Groups"]},
+        fields=["name", "parent_item_group", "is_group"],
+        order_by="name asc",
+    )
+    return groups
+
+
+@frappe.whitelist()
+def create_item_group(group_name, parent_item_group="All Item Groups"):
+    """Create a new Item Group. Admin only."""
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
+    group_name = (group_name or "").strip()
+    if not group_name:
+        frappe.throw("Group name is required")
+    if frappe.db.exists("Item Group", group_name):
+        frappe.throw(f"Item Group '{group_name}' already exists")
+    if not frappe.db.exists("Item Group", parent_item_group):
+        parent_item_group = "All Item Groups"
+    doc = frappe.new_doc("Item Group")
+    doc.item_group_name = group_name
+    doc.parent_item_group = parent_item_group
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return {"name": doc.name}
+
+
 @frappe.whitelist()
 def get_admin_products(limit=200):
     """Return all items (including disabled) for the admin products page."""
@@ -1459,17 +1958,7 @@ def _checkout_resolve_customer(address, mobile):
     """Return existing customer for logged-in user, or create a new one."""
     user = frappe.session.user
     if user and user not in ("Guest", "Administrator"):
-        # Try direct email_id field on Customer
-        cust = frappe.db.get_value("Customer", {"email_id": user}, "name")
-        if not cust:
-            # Try via Contact Email → Dynamic Link chain
-            contact_name = frappe.db.get_value("Contact Email", {"email_id": user}, "parent")
-            if contact_name:
-                cust = frappe.db.get_value(
-                    "Dynamic Link",
-                    {"parenttype": "Contact", "parent": contact_name, "link_doctype": "Customer"},
-                    "link_name",
-                )
+        cust = _get_primary_customer_for_user(user)
         if cust:
             return cust
 
@@ -1610,6 +2099,7 @@ def _checkout_create_sales_invoice(so, customer):
                 "qty":         so_item.qty,
                 "rate":        so_item.rate,
                 "sales_order": so.name,
+                "so_detail":   so_item.name,
             })
 
     si.flags.ignore_permissions = True

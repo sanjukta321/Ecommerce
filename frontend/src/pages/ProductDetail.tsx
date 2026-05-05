@@ -147,6 +147,11 @@ const ProductDetail: React.FC = () => {
     const [product, setProduct] = useState<DisplayProduct | null>(null);
     const [loading, setLoading] = useState(true);
 
+    interface ReviewEntry { name: string; reviewer: string; rating: number; review_title: string; comment: string; creation: string; }
+    const [itemReviews, setItemReviews] = useState<ReviewEntry[]>([]);
+    const [avgRating, setAvgRating] = useState(0);
+    const [reviewCount, setReviewCount] = useState(0);
+
     // Variant state
     const [isTemplate, setIsTemplate] = useState(false);
     const [variantData, setVariantData] = useState<VariantData | null>(null);
@@ -199,6 +204,21 @@ const ProductDetail: React.FC = () => {
                 setProduct(staticItem ? buildDisplayFromStatic(staticItem) : null);
             })
             .finally(() => setLoading(false));
+
+        // Fetch real reviews for this item
+        fetch(
+            `${BASE}/api/method/store_customizations.api.get_item_reviews?item_code=${encodeURIComponent(id)}`,
+            { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
+        )
+            .then(r => r.json())
+            .then(data => {
+                if (data.message) {
+                    setItemReviews(data.message.reviews || []);
+                    setAvgRating(data.message.avg_rating || 0);
+                    setReviewCount(data.message.count || 0);
+                }
+            })
+            .catch(() => {});
     }, [id]);
 
     // Derive active variant
@@ -305,9 +325,13 @@ const ProductDetail: React.FC = () => {
 
                         <div className="rating-section">
                             <div className="stars">
-                                {'★'.repeat(Math.floor(product.rating))}{'☆'.repeat(5 - Math.floor(product.rating))}
+                                {reviewCount > 0
+                                    ? ('★'.repeat(Math.round(avgRating)) + '☆'.repeat(5 - Math.round(avgRating)))
+                                    : '☆☆☆☆☆'}
                             </div>
-                            <span className="rating-text">{product.rating} ({product.reviews} reviews)</span>
+                            <span className="rating-text">
+                                {reviewCount > 0 ? `${avgRating.toFixed(1)} (${reviewCount} review${reviewCount > 1 ? 's' : ''})` : 'No reviews yet'}
+                            </span>
                         </div>
 
                         <div className="price-section">
@@ -508,20 +532,34 @@ const ProductDetail: React.FC = () => {
                         <h2>Customer Reviews & Ratings</h2>
                         <div className="reviews-summary">
                             <div className="rating-overview">
-                                <span className="big-rating">{product.rating}</span>
+                                <span className="big-rating">{reviewCount > 0 ? avgRating.toFixed(1) : '—'}</span>
                                 <div className="stars-large">
-                                    {'★'.repeat(Math.floor(product.rating))}{'☆'.repeat(5 - Math.floor(product.rating))}
+                                    {reviewCount > 0
+                                        ? ('★'.repeat(Math.round(avgRating)) + '☆'.repeat(5 - Math.round(avgRating)))
+                                        : '☆☆☆☆☆'}
                                 </div>
-                                <p>{product.reviews} verified ratings</p>
+                                <p>{reviewCount > 0 ? `${reviewCount} verified rating${reviewCount > 1 ? 's' : ''}` : 'No ratings yet'}</p>
                             </div>
                         </div>
-                        <div className="review-item">
-                            <div className="reviewer-info">
-                                <strong>John Doe</strong>
-                                <div className="stars">★★★★★</div>
-                            </div>
-                            <p>Excellent product! The quality is amazing and fits my needs perfectly.</p>
-                        </div>
+                        {itemReviews.length === 0 ? (
+                            <p style={{ color: 'var(--text-muted)', padding: '12px 0' }}>
+                                No reviews yet. Be the first to review this product!
+                            </p>
+                        ) : (
+                            itemReviews.map(r => (
+                                <div key={r.name} className="review-item">
+                                    <div className="reviewer-info">
+                                        <strong>{r.reviewer}</strong>
+                                        <div className="stars">
+                                            {'★'.repeat(Math.round(r.rating))}{'☆'.repeat(5 - Math.round(r.rating))}
+                                        </div>
+                                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 8 }}>{r.creation}</span>
+                                    </div>
+                                    {r.review_title && <strong style={{ display: 'block', marginBottom: 4 }}>{r.review_title}</strong>}
+                                    <p>{r.comment}</p>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>
