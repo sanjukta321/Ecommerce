@@ -1611,14 +1611,11 @@ def get_site_config():
 
     app_name = (ws.get("app_name") or "").strip()
 
-    # Priority: app_logo > banner_image > footer_logo > brand_html img tag
+    # Priority: app_logo > banner_image > brand_html img tag
     logo_url = (ws.get("app_logo") or "").strip()
 
     if not logo_url:
         logo_url = (ws.get("banner_image") or "").strip()
-
-    if not logo_url:
-        logo_url = (ws.get("footer_logo") or "").strip()
 
     if not logo_url:
         brand_html = ws.get("brand_html") or ""
@@ -1627,9 +1624,13 @@ def get_site_config():
         if m:
             logo_url = m.group(1).strip()
 
+    # Extract footer_logo specifically
+    footer_logo = (ws.get("footer_logo") or "").strip()
+
     return {
         "app_name": app_name,
         "logo_url": logo_url,
+        "footer_logo": footer_logo,
         "favicon":  (ws.get("favicon") or "").strip(),
     }
 

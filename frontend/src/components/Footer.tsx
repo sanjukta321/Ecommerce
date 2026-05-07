@@ -7,14 +7,15 @@ import '../styles/Footer.css';
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 const Footer: React.FC = () => {
-    const { app_name, logo_url } = useSiteConfig();
+    const { app_name, logo_url, footer_logo } = useSiteConfig();
+    const display_logo = footer_logo || logo_url;
     return (
         <footer className="footer fade-in">
             <div className="container footer-grid">
                 <div className="footer-brand">
                     <div className="logo">
-                        {logo_url
-                            ? <img src={logo_url.startsWith('http') ? logo_url : `${BASE}${logo_url}`} alt={app_name} style={{ maxHeight: 44, width: 'auto' }} />
+                        {display_logo
+                            ? <img src={display_logo.startsWith('http') ? display_logo : `${BASE}${display_logo}`} alt={app_name} style={{ maxHeight: 44, width: 'auto' }} />
                             : <BrandLogo appName={app_name} size="md" />}
                     </div>
                     <p>The world's most premium curated shopping experience. Elevating your lifestyle, one product at a time.</p>
@@ -81,7 +82,7 @@ const Footer: React.FC = () => {
                 </div>
             </div>
             <div className="footer-bottom container">
-                <p>&copy; 2026 ECStore. All rights reserved.</p>
+                <p>&copy; 2026 {app_name}. All rights reserved.</p>
                 <div className="policies">
                     <a href="#">Privacy Policy</a>
                     <a href="#">Terms of Service</a>

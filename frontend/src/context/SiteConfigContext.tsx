@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
-const CACHE_KEY = 'sb_site_config_v3';
+const CACHE_KEY = 'sb_site_config_v4';
 
 interface SiteConfig {
   app_name: string;
   logo_url: string;
+  footer_logo?: string;
   favicon: string;
 }
 
@@ -71,8 +72,9 @@ export function SiteConfigProvider({ children }: { children: React.ReactNode }) 
         if (!msg?.app_name) return;
 
         const next: SiteConfig = {
-          app_name: msg.app_name.trim(),
+          app_name: msg.app_name.trim() || FALLBACK.app_name,
           logo_url: (msg.logo_url || '').trim(),
+          footer_logo: (msg.footer_logo || '').trim(),
           favicon: (msg.favicon || '').trim(),
         };
 

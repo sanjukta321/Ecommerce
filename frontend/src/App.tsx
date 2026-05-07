@@ -39,10 +39,17 @@ import AdminOrders from './pages/admin/AdminOrders';
 import AdminSellers from './pages/admin/AdminSellers';
 import AdminCustomers from './pages/admin/AdminCustomers';
 import AdminReports from './pages/admin/AdminReports';
+import AdminSettings from './pages/admin/AdminSettings';
 import Wishlist from './pages/Wishlist';
 import Orders from './pages/Orders';
 import Checkout from './pages/Checkout';
 import './styles/index.css';
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
 
 function AppInner() {
   const location = useLocation();
@@ -129,6 +136,7 @@ function AppInner() {
           <Route path="/admin/sellers" element={<AdminSellers />} />
           <Route path="/admin/customers" element={<AdminCustomers />} />
           <Route path="/admin/reports" element={<AdminReports />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
         </Routes>
         {!isSellerRoute && !isAdminRoute && <DealOfTheDay />}
       </div>
@@ -142,6 +150,7 @@ function App() {
         <CartProvider>
           <WishlistProvider>
             <Router basename="/shop">
+              <ScrollToTop />
               <AppInner />
             </Router>
           </WishlistProvider>
