@@ -24,16 +24,16 @@ interface SalesOrder {
   has_return?: boolean;
 }
 
-type FilterTab = 'all' | 'Pending' | 'Confirmed' | 'On the Way' | 'Delivered' | 'Credit Note Issued' | 'Cancelled';
+type FilterTab = 'all' | 'To Deliver and Bill' | 'To Deliver' | 'To Bill' | 'Completed' | 'Cancelled' | 'Closed' | 'returns';
 
 const TABS: { key: FilterTab; label: string; color: string }[] = [
-  { key: 'all',                label: 'All',        color: '#64748b' },
-  { key: 'Pending',            label: 'Pending',    color: '#d97706' },
-  { key: 'Confirmed',          label: 'Confirmed',  color: '#2563eb' },
-  { key: 'On the Way',         label: 'On the Way', color: '#7c3aed' },
-  { key: 'Delivered',          label: 'Delivered',  color: '#059669' },
-  { key: 'Credit Note Issued', label: 'Returns',    color: '#b91c1c' },
-  { key: 'Cancelled',          label: 'Cancelled',  color: '#94a3b8' },
+  { key: 'all',                label: 'All',                color: '#64748b' },
+  { key: 'To Deliver and Bill',label: 'To Deliver & Bill',  color: '#f59e0b' },
+  { key: 'To Deliver',         label: 'To Deliver',         color: '#7c3aed' },
+  { key: 'To Bill',            label: 'To Bill',            color: '#2563eb' },
+  { key: 'Completed',          label: 'Completed',          color: '#059669' },
+  { key: 'returns',            label: 'Returns',            color: '#ef4444' },
+  { key: 'Cancelled',          label: 'Cancelled',          color: '#94a3b8' },
 ];
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; border: string; stripe: string }> = {
@@ -715,18 +715,19 @@ export default function AdminOrders() {
   useEffect(() => { fetchOrders(); }, [customerFilter]);
 
   const counts = useMemo(() => ({
-    total:     orders.length,
-    awaitingAction: orders.filter(o =>
-      (o.ecom_status === 'Confirmed' && !o.delivery_note) ||
-      (o.ecom_status === 'On the Way' && o.payment_method?.toLowerCase() === 'cod' && o.payment_status !== 'Paid')
-    ).length,
-    onTheWay:  orders.filter(o => o.ecom_status === 'On the Way').length,
-    delivered: orders.filter(o => o.ecom_status === 'Delivered').length,
-    returns:   orders.filter(o => o.ecom_status === 'Credit Note Issued').length,
+    total:       orders.length,
+    toDelBill:   orders.filter(o => o.status === 'To Deliver and Bill').length,
+    toDeliver:   orders.filter(o => o.status === 'To Deliver').length,
+    completed:   orders.filter(o => o.status === 'Completed').length,
+    returns:     orders.filter(o => !!o.return_invoice).length,
   }), [orders]);
 
   const filtered = useMemo(() => {
-    let list = activeTab === 'all' ? orders : orders.filter(o => o.ecom_status === activeTab);
+    let list = activeTab === 'all'
+      ? orders
+      : activeTab === 'returns'
+        ? orders.filter(o => !!o.return_invoice)
+        : orders.filter(o => o.status === activeTab);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(o => o.name.toLowerCase().includes(q) || (o.customer_name || '').toLowerCase().includes(q) || (o.sales_invoice || '').toLowerCase().includes(q));
@@ -774,13 +775,13 @@ export default function AdminOrders() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 14, marginBottom: 24 }}>
         <StatCard active={activeTab === 'all'} onClick={() => setActiveTab('all')} color="#3b82f6" value={loading ? '—' : counts.total} label="Total Orders"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>} />
-        <StatCard color="#f59e0b" value={loading ? '—' : counts.awaitingAction} label="Need Action"
+        <StatCard active={activeTab === 'To Deliver and Bill'} onClick={() => setActiveTab('To Deliver and Bill')} color="#f59e0b" value={loading ? '—' : counts.toDelBill} label="To Deliver & Bill"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>} />
-        <StatCard active={activeTab === 'On the Way'} onClick={() => setActiveTab('On the Way')} color="#7c3aed" value={loading ? '—' : counts.onTheWay} label="On the Way"
+        <StatCard active={activeTab === 'To Deliver'} onClick={() => setActiveTab('To Deliver')} color="#7c3aed" value={loading ? '—' : counts.toDeliver} label="To Deliver"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>} />
-        <StatCard active={activeTab === 'Delivered'} onClick={() => setActiveTab('Delivered')} color="#059669" value={loading ? '—' : counts.delivered} label="Delivered"
+        <StatCard active={activeTab === 'Completed'} onClick={() => setActiveTab('Completed')} color="#059669" value={loading ? '—' : counts.completed} label="Completed"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>} />
-        <StatCard active={activeTab === 'Credit Note Issued'} onClick={() => setActiveTab('Credit Note Issued')} color="#ef4444" value={loading ? '—' : counts.returns} label="Returns"
+        <StatCard active={activeTab === 'returns'} onClick={() => setActiveTab('returns')} color="#ef4444" value={loading ? '—' : counts.returns} label="Returns"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.27"/></svg>} />
       </div>
 
@@ -804,7 +805,11 @@ export default function AdminOrders() {
 
         <div className="admin-filter-tabs" style={{ marginBottom: 18 }}>
           {TABS.map(tab => {
-            const count = tab.key === 'all' ? orders.length : orders.filter(o => o.ecom_status === tab.key).length;
+            const count = tab.key === 'all'
+              ? orders.length
+              : tab.key === 'returns'
+                ? orders.filter(o => !!o.return_invoice).length
+                : orders.filter(o => o.status === tab.key).length;
             return (
               <button key={tab.key} className={`admin-filter-tab${activeTab === tab.key ? ' active' : ''}`} onClick={() => setActiveTab(tab.key)} style={activeTab === tab.key ? { borderColor: tab.color, color: tab.color } : {}}>
                 {tab.label}

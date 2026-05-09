@@ -1782,24 +1782,25 @@ def download_invoice_pdf(sales_order):
     if so_customer not in customer_names:
         frappe.throw("Not permitted", frappe.PermissionError)
 
-    invoices = frappe.get_all(
-        "Sales Invoice Item",
-        filters={"sales_order": sales_order, "docstatus": 1},
-        fields=["parent"],
-        distinct=True,
-        order_by="creation desc",
-        limit=1,
+    # Include draft (0) + submitted (1); prefer submitted; exclude cancelled + returns
+    si_rows = frappe.db.sql("""
+        SELECT sii.parent FROM `tabSales Invoice Item` sii
+        JOIN `tabSales Invoice` si ON si.name = sii.parent
+        WHERE sii.sales_order = %s
+          AND si.docstatus IN (0, 1)
+          AND COALESCE(si.is_return, 0) = 0
+        ORDER BY si.docstatus DESC
+        LIMIT 1
+    """, sales_order, as_list=True)
+    if not si_rows:
+        frappe.throw("No invoice found for this order")
+
+    si_name = si_rows[0][0]
+
+    print_format = (
+        frappe.db.get_value("DocType", "Sales Invoice", "default_print_format")
+        or "Standard"
     )
-    if not invoices:
-        frappe.throw("No submitted invoice found for this order")
-
-    si_name = invoices[0].parent
-
-    print_format = frappe.db.get_value(
-        "Print Format",
-        {"doc_type": "Sales Invoice", "default_print_format": 1},
-        "name",
-    ) or "Standard"
 
     # Use a dedicated low-privilege service user (only SI read access)
     # configured in site_config: {"invoice_reader_user": "invoice-reader@store.com"}

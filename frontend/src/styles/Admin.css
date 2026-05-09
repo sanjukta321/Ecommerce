@@ -242,6 +242,13 @@
   padding: 20px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.07);
   border: 1px solid #e8edf3;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+.admin-stat-card[style*="cursor: pointer"]:hover,
+.admin-stat-card[style*="cursor:pointer"]:hover {
+  box-shadow: 0 4px 16px rgba(59,130,246,0.13);
+  border-color: #bfdbfe;
+  transform: translateY(-2px);
 }
 
 .admin-stat-icon {

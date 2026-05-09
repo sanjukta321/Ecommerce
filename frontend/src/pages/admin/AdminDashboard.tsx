@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/admin/AdminLayout';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -91,6 +92,7 @@ function SkeletonStatCard() {
 // ── Main component ─────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [diag, setDiag] = useState<DiagnosticInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -187,7 +189,7 @@ export default function AdminDashboard() {
         ) : (
           <>
             {/* Total Revenue */}
-            <div className="admin-stat-card">
+            <div className="admin-stat-card" onClick={() => navigate('/admin/orders')} style={{ cursor: 'pointer' }}>
               <div className="admin-stat-icon blue">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="5" width="20" height="14" rx="2" />
@@ -199,7 +201,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Total Orders */}
-            <div className="admin-stat-card">
+            <div className="admin-stat-card" onClick={() => navigate('/admin/orders')} style={{ cursor: 'pointer' }}>
               <div className="admin-stat-icon green">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
@@ -212,7 +214,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Total Products */}
-            <div className="admin-stat-card">
+            <div className="admin-stat-card" onClick={() => navigate('/admin/products')} style={{ cursor: 'pointer' }}>
               <div className="admin-stat-icon orange">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -223,7 +225,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Total Customers */}
-            <div className="admin-stat-card">
+            <div className="admin-stat-card" onClick={() => navigate('/admin/customers')} style={{ cursor: 'pointer' }}>
               <div className="admin-stat-icon purple">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -235,7 +237,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Total Sellers */}
-            <div className="admin-stat-card">
+            <div className="admin-stat-card" onClick={() => navigate('/admin/sellers')} style={{ cursor: 'pointer' }}>
               <div className="admin-stat-icon purple">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
