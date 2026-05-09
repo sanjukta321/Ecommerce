@@ -14,7 +14,7 @@ interface ProfileProps { onLogout: () => void; }
 
 interface UserData {
     first_name: string; last_name: string; full_name: string;
-    email: string; mobile_no: string; gender: string;
+    email: string; mobile_no: string; gender: string; user_image?: string;
 }
 
 interface AddressData {
@@ -66,6 +66,12 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
     const [reviewsLoading, setReviewsLoading] = useState(false);
     const [notifPrefs, setNotifPrefs] = useState({ enable_email: true, enable_mention: true, enable_assignment: true, enable_share: true });
 
+    // ── Photo state ───────────────────────────────────────────
+    const [userImage, setUserImage] = useState('');
+    const [photoUploading, setPhotoUploading] = useState(false);
+    const [photoMsg, setPhotoMsg] = useState('');
+    const photoInputRef = useRef<HTMLInputElement>(null);
+
     // ── Address state ──────────────────────────────────────────
     const [addresses, setAddresses] = useState<AddressData[]>([]);
     const [addrLoading, setAddrLoading] = useState(true);
@@ -81,6 +87,73 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         setTimeout(() => setNavToast(''), 2500);
     };
 
+    const getCSRF = (): string =>
+        (window as any).frappe?.csrf_token ||
+        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+        'fetch';
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setPhotoUploading(true);
+        setPhotoMsg('');
+        const csrf = getCSRF();
+        const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('is_private', '0');
+            fd.append('doctype', 'User');
+            fd.append('docname', userData.email);
+            fd.append('fieldname', 'user_image');
+            fd.append('optimize', '1');
+            const uploadRes = await fetch(`${BASE}/api/method/upload_file`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'X-Frappe-CSRF-Token': csrf },
+                body: fd,
+            });
+            if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`);
+            const uploadData = await uploadRes.json();
+            const fileUrl: string = uploadData.message?.file_url || '';
+            if (!fileUrl) throw new Error('No file_url in response');
+            const updateRes = await fetch(`${BASE}/api/method/store_customizations.api.update_profile_photo`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrf },
+                body: new URLSearchParams({ file_url: fileUrl }).toString(),
+            });
+            const updateData = await updateRes.json();
+            if (updateData.message?.user_image) {
+                setUserImage(updateData.message.user_image);
+                setPhotoMsg('Photo updated!');
+            }
+        } catch (err) {
+            setPhotoMsg(`Upload failed: ${err instanceof Error ? err.message : 'Try again.'}`);
+        } finally {
+            setPhotoUploading(false);
+        }
+    };
+
+    const handleSetDefaultAddress = async (addressName: string) => {
+        const csrf = getCSRF();
+        const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+        try {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.set_default_address`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrf },
+                body: new URLSearchParams({ address_name: addressName }).toString(),
+            });
+            const data = await res.json();
+            if (data.message?.default_address) {
+                setAddresses(prev => prev.map(a => ({
+                    ...a,
+                    is_primary_address: a.name === addressName ? 1 : 0,
+                })));
+            }
+        } catch {
+            // silent
+        }
+    };
+
     // ── Data fetching ──────────────────────────────────────────
     useEffect(() => {
         api<{ message: UserData }>('/api/method/store_customizations.api.get_current_user_profile')
@@ -90,8 +163,10 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                     first_name: raw.first_name || '', last_name: raw.last_name || '',
                     full_name: raw.full_name || '', email: raw.email || '',
                     mobile_no: raw.mobile_no || '', gender: raw.gender || '',
+                    user_image: raw.user_image || '',
                 };
                 setUserData(d); setForm(d);
+                setUserImage(raw.user_image || '');
             })
             .catch(() => setError('Could not load profile. Please refresh.'))
             .finally(() => setLoading(false));
@@ -298,12 +373,25 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                     )}
 
                     <div className="user-greeting card">
-                        <div className="avatar">
-                            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`} alt="Avatar" />
+                        <div
+                            className="avatar profile-avatar-large"
+                            onClick={() => photoInputRef.current?.click()}
+                            title="Click to change photo"
+                            style={{ cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
+                        >
+                            {userImage ? (
+                                <img src={`${import.meta.env.VITE_API_BASE_URL ?? ''}${userImage}`} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                                <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`} alt="Avatar" />
+                            )}
+                            <div className="profile-avatar-edit-overlay">Change</div>
                         </div>
+                        <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
                         <div className="greeting-text">
                             <span className="hello">Hello,</span>
                             <h3>{displayName}</h3>
+                            {photoUploading && <p style={{ fontSize: 11, color: '#6b7280', margin: '2px 0 0' }}>Uploading…</p>}
+                            {photoMsg && <p style={{ fontSize: 11, color: '#10b981', margin: '2px 0 0' }}>{photoMsg}</p>}
                         </div>
                     </div>
 
@@ -739,8 +827,8 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                                                             <div style={{ color: 'var(--text-dim)' }}>{addr.country}</div>
                                                         </div>
 
-                                                        {/* Edit / Delete buttons */}
-                                                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                                                        {/* Edit / Delete / Default buttons */}
+                                                        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                                                             <button className="addr-btn" onClick={() => openAddrForm(addr)}>
                                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                                                 Edit
@@ -753,6 +841,16 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                                                                 {deletingAddr === addr.name ? 'Deleting…' : 'Delete'}
                                                             </button>
+                                                            {addr.is_primary_address !== 1 ? (
+                                                                <button
+                                                                    className="addr-btn addr-action-btn set-default-btn"
+                                                                    onClick={() => handleSetDefaultAddress(addr.name)}
+                                                                >
+                                                                    Set as Default
+                                                                </button>
+                                                            ) : (
+                                                                <span className="addr-default-badge">Default</span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ))}

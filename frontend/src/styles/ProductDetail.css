@@ -698,3 +698,25 @@
         padding: 25px;
     }
 }
+.out-of-stock-label {
+    color: #ef4444;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.stock-alert-section { display: flex; flex-direction: column; gap: 8px; }
+.notify-me-btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    border: 2px solid #f59e0b;
+    background: #fef3c7;
+    color: #92400e;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.notify-me-btn:hover { background: #fde68a; }
+.notify-me-btn.subscribed { background: #d1fae5; border-color: #10b981; color: #065f46; }
+.notify-me-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.stock-alert-msg { font-size: 12px; color: #6b7280; }

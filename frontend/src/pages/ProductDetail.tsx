@@ -18,6 +18,7 @@ interface FrappeItem {
     image?: string;
     description?: string;
     has_variants?: number;
+    actual_qty?: number;
 }
 
 interface VariantItem {
@@ -46,6 +47,7 @@ interface DisplayProduct {
     features: string[];
     specifications: Record<string, string>;
     tags?: string[];
+    actual_qty?: number;
 }
 
 const PLACEHOLDER = 'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&q=80&w=1000';
@@ -98,6 +100,7 @@ function buildDisplayFromFrappe(item: FrappeItem): DisplayProduct {
             'Availability': 'In Stock',
         },
         tags: [],
+        actual_qty: item.actual_qty,
     };
 }
 
@@ -146,6 +149,9 @@ const ProductDetail: React.FC = () => {
 
     const [product, setProduct] = useState<DisplayProduct | null>(null);
     const [loading, setLoading] = useState(true);
+    const [stockAlertSubscribed, setStockAlertSubscribed] = useState(false);
+    const [stockAlertLoading, setStockAlertLoading] = useState(false);
+    const [stockAlertMsg, setStockAlertMsg] = useState('');
 
     interface ReviewEntry { name: string; reviewer: string; rating: number; review_title: string; comment: string; creation: string; }
     const [itemReviews, setItemReviews] = useState<ReviewEntry[]>([]);
@@ -219,7 +225,40 @@ const ProductDetail: React.FC = () => {
                 }
             })
             .catch(() => {});
+
+        // Fetch stock alert subscription status
+        fetch(
+            `${BASE}/api/method/store_customizations.api.get_stock_alert_status?item_code=${encodeURIComponent(id)}`,
+            { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
+        )
+            .then(r => r.json())
+            .then(d => setStockAlertSubscribed(d.message?.subscribed || false))
+            .catch(() => {});
     }, [id]);
+
+    const handleStockAlert = async (itemCode: string) => {
+        setStockAlertLoading(true);
+        setStockAlertMsg('');
+        const endpoint = stockAlertSubscribed ? 'unsubscribe_stock_alert' : 'subscribe_stock_alert';
+        try {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.${endpoint}`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrfToken() },
+                body: new URLSearchParams({ item_code: itemCode }).toString(),
+            });
+            const data = await res.json();
+            if (data.message?.subscribed !== undefined || data.message?.unsubscribed) {
+                setStockAlertSubscribed(!stockAlertSubscribed);
+                setStockAlertMsg(stockAlertSubscribed ? 'Alert removed.' : "We'll notify you when this item is back!");
+            } else if (data.exc_type === 'PermissionError') {
+                setStockAlertMsg('Please log in to set stock alerts.');
+            }
+        } catch {
+            setStockAlertMsg('Something went wrong.');
+        } finally {
+            setStockAlertLoading(false);
+        }
+    };
 
     // Derive active variant
     // Detect actual attribute names from Frappe (avoids hardcoding 'Colour'/'Size')
@@ -446,59 +485,79 @@ const ProductDetail: React.FC = () => {
 
                         {/* Action Buttons */}
                         <div className="action-buttons">
-                            <button
-                                className="premium-btn add-to-cart"
-                                disabled={!canAddToCart}
-                                style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                                onClick={() => {
-                                    if (!canAddToCart) return;
-                                    addToCart({
-                                        id: cartItemId,
-                                        name: activeVariant
-                                            ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
-                                            : product.name,
-                                        price: numericPrice,
-                                        image: displayImage,
-                                        size: isTemplate ? selectedVariantSize : selectedSize,
-                                        quantity,
-                                    });
-                                    showToast(`${product.name} added to cart!`, 'success');
-                                    setAddedToCart(true);
-                                    setTimeout(() => setAddedToCart(false), 2000);
-                                }}
-                            >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
-                                {addedToCart ? '✓ Added!' : 'Add to Cart'}
-                            </button>
-                            <button
-                                className="premium-btn buy-now-btn"
-                                disabled={!canAddToCart}
-                                style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                                onClick={() => {
-                                    if (!canAddToCart) return;
-                                    addToCart({
-                                        id: cartItemId,
-                                        name: activeVariant
-                                            ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
-                                            : product.name,
-                                        price: numericPrice,
-                                        image: displayImage,
-                                        size: isTemplate ? selectedVariantSize : selectedSize,
-                                        quantity,
-                                    });
-                                    navigate('/cart');
-                                }}
-                            >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
-                                Buy Now
-                            </button>
-                            <button
-                                className={`wishlist-btn ${isWishlisted(product.id) ? 'wishlisted' : ''}`}
-                                onClick={() => toggleWishlist({ id: product.id, name: product.name, price: numericPrice, image: product.image })}
-                                title={isWishlisted(product.id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
-                            >
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-                            </button>
+                            {(product.actual_qty ?? 1) <= 0 ? (
+                                <div className="stock-alert-section">
+                                    <p className="out-of-stock-label">Out of Stock</p>
+                                    <button
+                                        className={`notify-me-btn ${stockAlertSubscribed ? 'subscribed' : ''}`}
+                                        disabled={stockAlertLoading}
+                                        onClick={() => handleStockAlert(product.id)}
+                                    >
+                                        {stockAlertLoading
+                                            ? 'Please wait…'
+                                            : stockAlertSubscribed
+                                                ? 'Notifying You'
+                                                : 'Notify Me When Available'}
+                                    </button>
+                                    {stockAlertMsg && <p className="stock-alert-msg">{stockAlertMsg}</p>}
+                                </div>
+                            ) : (
+                                <>
+                                    <button
+                                        className="premium-btn add-to-cart"
+                                        disabled={!canAddToCart}
+                                        style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                        onClick={() => {
+                                            if (!canAddToCart) return;
+                                            addToCart({
+                                                id: cartItemId,
+                                                name: activeVariant
+                                                    ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
+                                                    : product.name,
+                                                price: numericPrice,
+                                                image: displayImage,
+                                                size: isTemplate ? selectedVariantSize : selectedSize,
+                                                quantity,
+                                            });
+                                            showToast(`${product.name} added to cart!`, 'success');
+                                            setAddedToCart(true);
+                                            setTimeout(() => setAddedToCart(false), 2000);
+                                        }}
+                                    >
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
+                                        {addedToCart ? '✓ Added!' : 'Add to Cart'}
+                                    </button>
+                                    <button
+                                        className="premium-btn buy-now-btn"
+                                        disabled={!canAddToCart}
+                                        style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                        onClick={() => {
+                                            if (!canAddToCart) return;
+                                            addToCart({
+                                                id: cartItemId,
+                                                name: activeVariant
+                                                    ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
+                                                    : product.name,
+                                                price: numericPrice,
+                                                image: displayImage,
+                                                size: isTemplate ? selectedVariantSize : selectedSize,
+                                                quantity,
+                                            });
+                                            navigate('/cart');
+                                        }}
+                                    >
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                                        Buy Now
+                                    </button>
+                                    <button
+                                        className={`wishlist-btn ${isWishlisted(product.id) ? 'wishlisted' : ''}`}
+                                        onClick={() => toggleWishlist({ id: product.id, name: product.name, price: numericPrice, image: product.image })}
+                                        title={isWishlisted(product.id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                                    >
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

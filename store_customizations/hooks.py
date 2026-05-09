@@ -170,13 +170,11 @@ website_route_rules = [
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+    "Stock Entry": {
+        "on_submit": "store_customizations.store_customizations.doctype.stock_alert.stock_alert._on_stock_entry_submit"
+    }
+}
 
 # Scheduled Tasks
 # ---------------

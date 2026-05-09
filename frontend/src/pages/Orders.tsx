@@ -18,25 +18,36 @@ interface Order {
     name: string;
     transaction_date: string;
     delivery_date?: string;
+    actual_delivery_date?: string;
     status: string;
     ecom_status: string;
     payment_method: string;
     payment_status: string;
     sales_invoice?: string;
+    return_invoice?: string;
     delivery_note?: string;
     grand_total: number;
     items: OrderItem[];
+    docstatus?: number;
 }
 
-const STEPS = ['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Paid'] as const;
+// ecom_status values: Pending | Confirmed | On the Way | Delivered | Credit Note Issued | Cancelled
+const STEPS = ['Pending', 'Confirmed', 'On the Way', 'Delivered'] as const;
 type Step = typeof STEPS[number];
 
-function stepIndex(ecom_status: string): number {
-    const idx = STEPS.indexOf(ecom_status as Step);
-    return idx >= 0 ? idx : 0;
-}
+const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
+    'Pending':            { label: 'Pending',            color: '#d97706', bg: '#fef3c7' },
+    'Confirmed':          { label: 'Confirmed',          color: '#2563eb', bg: '#dbeafe' },
+    'On the Way':         { label: 'On the Way',         color: '#7c3aed', bg: '#ede9fe' },
+    'Delivered':          { label: 'Delivered',          color: '#059669', bg: '#d1fae5' },
+    'Credit Note Issued': { label: 'Credit Note Issued', color: '#b91c1c', bg: '#fee2e2' },
+    'Cancelled':          { label: 'Cancelled',          color: '#dc2626', bg: '#fee2e2' },
+};
 
-function formatDate(dateStr: string): string {
+type TabKey = 'All' | 'On the Way' | 'Delivered' | 'Cancelled' | 'Returns';
+const TABS: TabKey[] = ['All', 'On the Way', 'Delivered', 'Cancelled', 'Returns'];
+
+function formatDate(dateStr?: string): string {
     if (!dateStr) return '—';
     try {
         return new Date(dateStr).toLocaleDateString('en-IN', {
@@ -47,52 +58,42 @@ function formatDate(dateStr: string): string {
     }
 }
 
-const StepIcons: Record<Step, React.ReactNode> = {
-    Pending: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-        </svg>
-    ),
-    Confirmed: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <polyline points="20 6 9 17 4 12" />
-        </svg>
-    ),
-    Shipped: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <rect x="1" y="3" width="15" height="13" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
-        </svg>
-    ),
-    Delivered: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-    ),
-    Paid: (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <rect x="1" y="4" width="22" height="16" rx="2" /><line x1="1" y1="10" x2="23" y2="10" />
-        </svg>
-    ),
-};
-
-interface ProgressBarProps {
-    ecom_status: string;
+function daysSince(dateStr?: string): number {
+    if (!dateStr) return 999;
+    return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
 }
 
-const OrderProgressBar: React.FC<ProgressBarProps> = ({ ecom_status }) => {
-    const current = stepIndex(ecom_status);
+function canRequestReturn(order: Order): boolean {
+    const ecom = order.ecom_status;
+    if (ecom === 'Credit Note Issued' || ecom === 'Cancelled') return false;
+    if (ecom !== 'Delivered' && ecom !== 'On the Way') return false;
+    if (order.actual_delivery_date) {
+        return daysSince(order.actual_delivery_date) <= 7;
+    }
+    return true;
+}
+
+const OrderProgressBar: React.FC<{ ecom_status: string }> = ({ ecom_status }) => {
+    if (ecom_status === 'Cancelled') {
+        return (
+            <div className="order-progress cancelled-bar">
+                <span className="cancelled-label">Order Cancelled</span>
+            </div>
+        );
+    }
+    const current = STEPS.indexOf(ecom_status as Step);
     return (
         <div className="order-progress">
             {STEPS.map((step, i) => (
                 <React.Fragment key={step}>
                     <div className={`op-step ${i < current ? 'completed' : i === current ? 'active' : ''}`}>
                         <div className="op-dot">
-                            {i < current ? (
+                            {i <= current ? (
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                                     <polyline points="20 6 9 17 4 12" />
                                 </svg>
                             ) : (
-                                StepIcons[step]
+                                <span style={{ fontSize: 9, fontWeight: 700 }}>{i + 1}</span>
                             )}
                         </div>
                         <span className="op-label">{step}</span>
@@ -106,30 +107,96 @@ const OrderProgressBar: React.FC<ProgressBarProps> = ({ ecom_status }) => {
     );
 };
 
+const getCSRF = () =>
+    (window as any).frappe?.csrf_token ||
+    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+    'fetch';
+
 const Orders: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [activeTab, setActiveTab] = useState<TabKey>('All');
+    const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+    const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
+    const [showReturnModal, setShowReturnModal] = useState<string | null>(null);
+    const [returnReason, setReturnReason] = useState('');
 
-    useEffect(() => {
+    const fetchOrders = () => {
         const mobile = localStorage.getItem('checkout_mobile') || '';
         const params = mobile ? `?mobile=${encodeURIComponent(mobile)}` : '';
-
+        setLoading(true);
         fetch(`${BASE}/api/method/store_customizations.api.get_my_orders${params}`, {
             credentials: 'include',
-            headers: {
-                'X-Frappe-CSRF-Token':
-                    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch',
-            },
+            headers: { 'X-Frappe-CSRF-Token': getCSRF() },
         })
             .then(r => r.json())
-            .then(data => {
-                const list: Order[] = data.message || [];
-                setOrders(list);
-            })
+            .then(data => setOrders(data.message || []))
             .catch(() => setError('Could not load orders. Please try again.'))
             .finally(() => setLoading(false));
-    }, []);
+    };
+
+    useEffect(() => { fetchOrders(); }, []);
+
+    const handleCancelOrder = async (orderName: string) => {
+        if (!confirm('Cancel this order?')) return;
+        setActionLoading(p => ({ ...p, [orderName]: true }));
+        try {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.cancel_order`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': getCSRF() },
+                body: new URLSearchParams({ sales_order: orderName }).toString(),
+            });
+            const data = await res.json();
+            if (data.message?.cancelled) {
+                setOrders(prev => prev.map(o =>
+                    o.name === orderName ? { ...o, ecom_status: 'Cancelled' } : o
+                ));
+            } else {
+                setActionMsg(p => ({ ...p, [orderName]: data.exc_type || 'Could not cancel.' }));
+            }
+        } catch {
+            setActionMsg(p => ({ ...p, [orderName]: 'Network error.' }));
+        } finally {
+            setActionLoading(p => ({ ...p, [orderName]: false }));
+        }
+    };
+
+    const handleRequestReturn = async (orderName: string) => {
+        if (!returnReason.trim()) return;
+        setActionLoading(p => ({ ...p, [orderName]: true }));
+        try {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.request_return`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': getCSRF() },
+                body: new URLSearchParams({ sales_order: orderName, reason: returnReason }).toString(),
+            });
+            const data = await res.json();
+            if (data.message?.return_invoice) {
+                setShowReturnModal(null);
+                setReturnReason('');
+                fetchOrders();
+            } else {
+                setActionMsg(p => ({ ...p, [orderName]: data.exc_type || 'Could not submit return.' }));
+            }
+        } catch {
+            setActionMsg(p => ({ ...p, [orderName]: 'Network error.' }));
+        } finally {
+            setActionLoading(p => ({ ...p, [orderName]: false }));
+        }
+    };
+
+    const tabCount = (tab: TabKey) => {
+        if (tab === 'All') return orders.length;
+        if (tab === 'Returns') return orders.filter(o => o.ecom_status === 'Credit Note Issued').length;
+        return orders.filter(o => o.ecom_status === tab).length;
+    };
+
+    const filteredOrders = orders.filter(o => {
+        if (activeTab === 'All') return true;
+        if (activeTab === 'Returns') return o.ecom_status === 'Credit Note Issued';
+        return o.ecom_status === activeTab;
+    });
 
     return (
         <div className="orders-page">
@@ -137,6 +204,24 @@ const Orders: React.FC = () => {
                 <div className="orders-header">
                     <h2>My Orders</h2>
                 </div>
+
+                {/* Filter Tabs */}
+                {!loading && !error && (
+                    <div className="orders-tabs">
+                        {TABS.map(tab => (
+                            <button
+                                key={tab}
+                                className={`orders-tab ${activeTab === tab ? 'active' : ''}`}
+                                onClick={() => setActiveTab(tab)}
+                            >
+                                {tab}
+                                {tabCount(tab) > 0 && (
+                                    <span className="tab-count">{tabCount(tab)}</span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="empty-orders card glass-effect">
@@ -146,25 +231,33 @@ const Orders: React.FC = () => {
                     <div className="empty-orders card glass-effect">
                         <p style={{ color: '#ef4444' }}>{error}</p>
                     </div>
-                ) : orders.length === 0 ? (
+                ) : filteredOrders.length === 0 ? (
                     <div className="empty-orders card glass-effect">
                         <div className="empty-icon">
                             <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
                                 <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-                                <path d="M3 6h18" />
-                                <path d="M16 10a4 4 0 0 1-8 0" />
+                                <path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" />
                             </svg>
                         </div>
-                        <h3>You haven't ordered anything yet!</h3>
-                        <p>Seems like you haven't bought anything yet.</p>
-                        <Link to="/" className="shop-now-btn">Shop Now</Link>
+                        <h3>{activeTab === 'All' ? "You haven't ordered anything yet!" : `No ${activeTab} orders`}</h3>
+                        {activeTab === 'All' && <Link to="/" className="shop-now-btn">Shop Now</Link>}
                     </div>
                 ) : (
                     <div className="orders-list">
-                        {orders.map(order => {
+                        {filteredOrders.map(order => {
                             const ecom = order.ecom_status || 'Pending';
                             const isCOD = (order.payment_method || '').toLowerCase() === 'cod';
                             const isPaid = order.payment_status === 'Paid';
+                            const statusStyle = STATUS_MAP[ecom] || STATUS_MAP['Pending'];
+                            const returnAllowed = canRequestReturn(order);
+                            const returnDeadline = (() => {
+                                if (ecom !== 'Delivered' && ecom !== 'On the Way') return null;
+                                if (!order.actual_delivery_date) return null;
+                                const days = daysSince(order.actual_delivery_date);
+                                if (days > 7) return null;
+                                return 7 - days;
+                            })();
+
                             return (
                                 <div key={order.name} className="order-card card glass-effect">
                                     <div className="order-header">
@@ -173,6 +266,12 @@ const Orders: React.FC = () => {
                                         </div>
                                         <div className="order-header-right">
                                             <div className="order-date">{formatDate(order.transaction_date)}</div>
+                                            <span
+                                                className="ecom-status-badge"
+                                                style={{ color: statusStyle.color, background: statusStyle.bg }}
+                                            >
+                                                {statusStyle.label}
+                                            </span>
                                             {isCOD && (
                                                 <span className={`payment-badge ${isPaid ? 'paid' : 'cod-unpaid'}`}>
                                                     {isPaid ? '✓ Paid' : 'Cash on Delivery'}
@@ -221,12 +320,96 @@ const Orders: React.FC = () => {
                                         <div className="order-total">
                                             Total: <span>₹{(order.grand_total || 0).toLocaleString('en-IN')}</span>
                                         </div>
-                                        {order.delivery_date && (
-                                            <div style={{ fontSize: 12, color: '#6b7280' }}>
-                                                Expected by {formatDate(order.delivery_date)}
-                                            </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                            {order.delivery_date && ecom !== 'Delivered' && ecom !== 'Cancelled' && (
+                                                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                                                    Expected by {formatDate(order.delivery_date)}
+                                                </div>
+                                            )}
+                                            {order.actual_delivery_date && (
+                                                <div style={{ fontSize: 12, color: '#059669' }}>
+                                                    Delivered on {formatDate(order.actual_delivery_date)}
+                                                </div>
+                                            )}
+                                            {returnDeadline !== null && ecom !== 'Credit Note Issued' && (
+                                                <div style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
+                                                    Return window: {returnDeadline} day{returnDeadline !== 1 ? 's' : ''} left
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="order-actions">
+                                        {order.sales_invoice && (
+                                            <a
+                                                href={`${BASE}/api/method/store_customizations.api.download_invoice_pdf?sales_order=${encodeURIComponent(order.name)}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="order-action-btn download-btn"
+                                            >
+                                                Download Invoice
+                                            </a>
+                                        )}
+                                        {ecom === 'Pending' && (
+                                            <button
+                                                className="order-action-btn cancel-btn"
+                                                disabled={actionLoading[order.name]}
+                                                onClick={() => handleCancelOrder(order.name)}
+                                            >
+                                                {actionLoading[order.name] ? 'Cancelling…' : 'Cancel Order'}
+                                            </button>
+                                        )}
+                                        {ecom === 'Credit Note Issued' && (
+                                            <span className="return-submitted-badge">
+                                                Credit Note: {order.return_invoice}
+                                            </span>
+                                        )}
+                                        {returnAllowed && (
+                                            <button
+                                                className="order-action-btn return-btn"
+                                                onClick={() => setShowReturnModal(order.name)}
+                                            >
+                                                Request Return
+                                            </button>
+                                        )}
+                                        {!returnAllowed && (ecom === 'Delivered' || ecom === 'On the Way') && (
+                                            <span style={{ fontSize: 11, color: '#9ca3af' }}>Return window expired</span>
+                                        )}
+                                        {actionMsg[order.name] && (
+                                            <p className="order-action-msg">{actionMsg[order.name]}</p>
                                         )}
                                     </div>
+
+                                    {showReturnModal === order.name && (
+                                        <div className="return-modal-overlay" onClick={() => setShowReturnModal(null)}>
+                                            <div className="return-modal" onClick={e => e.stopPropagation()}>
+                                                <h3>Request Return</h3>
+                                                <p style={{ fontSize: 13, color: '#6b7280' }}>
+                                                    Tell us why you want to return this order.
+                                                    {returnDeadline !== null && (
+                                                        <span style={{ color: '#f59e0b', fontWeight: 600 }}> ({returnDeadline} day{returnDeadline !== 1 ? 's' : ''} left)</span>
+                                                    )}
+                                                </p>
+                                                <textarea
+                                                    className="return-reason-input"
+                                                    rows={3}
+                                                    placeholder="Reason for return..."
+                                                    value={returnReason}
+                                                    onChange={e => setReturnReason(e.target.value)}
+                                                />
+                                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                                                    <button className="order-action-btn" onClick={() => setShowReturnModal(null)}>Close</button>
+                                                    <button
+                                                        className="order-action-btn return-btn"
+                                                        disabled={!returnReason.trim() || actionLoading[order.name]}
+                                                        onClick={() => handleRequestReturn(order.name)}
+                                                    >
+                                                        {actionLoading[order.name] ? 'Submitting…' : 'Submit Return'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}

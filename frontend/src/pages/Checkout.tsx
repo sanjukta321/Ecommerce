@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import Footer from '../components/Footer';
@@ -65,10 +65,24 @@ const Checkout: React.FC = () => {
     const [paymentMethod, setPaymentMethod] = useState<'cod' | 'upi' | 'card'>('upi');
     const [placing, setPlacing] = useState(false);
     const [orderError, setOrderError] = useState('');
+    const [loyaltyBalance, setLoyaltyBalance] = useState<{ points: number; value: number } | null>(null);
+    const [redeemLoyalty, setRedeemLoyalty] = useState(false);
+    const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
 
     // Step 4: Success
     const [orderId, setOrderId] = useState('');
     const [invoiceId, setInvoiceId] = useState('');
+
+    useEffect(() => {
+        if (step !== 'payment') return;
+        fetch(`${BASE}/api/method/store_customizations.api.get_loyalty_balance`, {
+            credentials: 'include',
+            headers: { 'X-Frappe-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch' },
+        })
+            .then(r => r.json())
+            .then(d => { if (d.message?.points > 0) setLoyaltyBalance(d.message); })
+            .catch(() => {});
+    }, [step]);
 
     if (cart.length === 0 && step !== 'success') {
         navigate('/cart');
@@ -212,6 +226,9 @@ const Checkout: React.FC = () => {
             });
             if (selectedSavedAddress) {
                 params.set('saved_address_name', selectedSavedAddress.name);
+            }
+            if (redeemLoyalty && loyaltyPointsToRedeem > 0) {
+                params.set('loyalty_points', String(loyaltyPointsToRedeem));
             }
 
             const csrfToken = await getCsrfToken();
@@ -427,6 +444,38 @@ const Checkout: React.FC = () => {
                                 {paymentMethod === 'upi' && (
                                     <div className="upi-input fade-in">
                                         <input type="text" placeholder="Enter VPA / UPI ID (e.g. user@okaxis)" />
+                                    </div>
+                                )}
+
+                                {loyaltyBalance && loyaltyBalance.points > 0 && (
+                                    <div className="loyalty-section">
+                                        <div className="loyalty-header">
+                                            <span>Loyalty Points</span>
+                                            <span className="loyalty-pts">{loyaltyBalance.points} pts (₹{loyaltyBalance.value})</span>
+                                        </div>
+                                        <label className="loyalty-toggle">
+                                            <input
+                                                type="checkbox"
+                                                checked={redeemLoyalty}
+                                                onChange={e => {
+                                                    setRedeemLoyalty(e.target.checked);
+                                                    if (e.target.checked) setLoyaltyPointsToRedeem(loyaltyBalance.points);
+                                                    else setLoyaltyPointsToRedeem(0);
+                                                }}
+                                            />
+                                            <span>Redeem {loyaltyBalance.points} points (saves ₹{loyaltyBalance.value})</span>
+                                        </label>
+                                        {redeemLoyalty && (
+                                            <input
+                                                type="number"
+                                                className="loyalty-points-input"
+                                                min={1}
+                                                max={loyaltyBalance.points}
+                                                value={loyaltyPointsToRedeem}
+                                                onChange={e => setLoyaltyPointsToRedeem(Math.min(Number(e.target.value), loyaltyBalance.points))}
+                                                placeholder="Points to redeem"
+                                            />
+                                        )}
                                     </div>
                                 )}
 
