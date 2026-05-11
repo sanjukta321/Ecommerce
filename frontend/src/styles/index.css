@@ -187,3 +187,22 @@ ul {
         padding-top: 80px !important;
     }
 }
+
+/* Page-level loading spinner (Suspense fallback) */
+.app-page-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+.app-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: appSpin 0.7s linear infinite;
+}
+@keyframes appSpin {
+  to { transform: rotate(360deg); }
+}

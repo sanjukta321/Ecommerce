@@ -1,5 +1,31 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { Component, useState, useEffect, lazy, Suspense } from 'react';
+import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, color: '#64748b', fontFamily: 'inherit' }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <p style={{ fontWeight: 600, fontSize: 15, margin: 0 }}>Something went wrong loading this page.</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '8px 20px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function PageLoader() {
+  return <div className="app-page-loader"><div className="app-spinner" /></div>;
+}
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { ToastProvider } from './context/ToastContext';
@@ -92,7 +118,8 @@ function AppInner() {
   return (
     <div className="App">
       {!isSellerRoute && !isAdminRoute && <Navbar isLoggedIn={isLoggedIn} onLogout={handleLogout} />}
-      <Suspense fallback={null}>
+      <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/"             element={<Home />} />
           <Route path="/electronics"  element={<Electronics />} />
@@ -138,6 +165,7 @@ function AppInner() {
           <Route path="/admin/settings"      element={<AdminSettings />} />
         </Routes>
       </Suspense>
+      </ErrorBoundary>
       {!isSellerRoute && !isAdminRoute && <DealOfTheDay />}
     </div>
   );
