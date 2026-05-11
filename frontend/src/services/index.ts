@@ -8,7 +8,7 @@
  * To add a NEW domain (e.g. "reviews"):
  *   1. Create src/services/reviews.ts
  *   2. Add `export * as reviews from './reviews'` below
- *   3. Add the Python functions in store_customizations/api.py
+ *   3. Add the Python functions in the appropriate store_customizations/api/<module>.py file
  */
 
 export * as auth      from './auth';

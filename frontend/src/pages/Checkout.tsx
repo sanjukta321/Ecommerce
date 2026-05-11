@@ -12,7 +12,7 @@ async function getCsrfToken(): Promise<string> {
     const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     if (metaToken && metaToken !== 'None') return metaToken;
     try {
-        const res = await fetch(`${BASE}/api/method/store_customizations.api.get_csrf_token`, { credentials: 'include' });
+        const res = await fetch(`${BASE}/api/method/store_customizations.api.customer.get_csrf_token`, { credentials: 'include' });
         const d = await res.json();
         return d.message || '';
     } catch {
@@ -75,7 +75,7 @@ const Checkout: React.FC = () => {
 
     useEffect(() => {
         if (step !== 'payment') return;
-        fetch(`${BASE}/api/method/store_customizations.api.get_loyalty_balance`, {
+        fetch(`${BASE}/api/method/store_customizations.api.customer.get_loyalty_balance`, {
             credentials: 'include',
             headers: { 'X-Frappe-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch' },
         })
@@ -125,7 +125,7 @@ const Checkout: React.FC = () => {
         try {
             const csrfToken = await getCsrfToken();
             const params = new URLSearchParams({ mobile });
-            const res = await fetch(`${BASE}/api/method/store_customizations.api.send_checkout_otp`, {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.checkout.send_checkout_otp`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrfToken },
@@ -159,7 +159,7 @@ const Checkout: React.FC = () => {
         try {
             const csrfToken = await getCsrfToken();
             const params = new URLSearchParams({ mobile, otp });
-            const res = await fetch(`${BASE}/api/method/store_customizations.api.verify_checkout_otp`, {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.checkout.verify_checkout_otp`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrfToken },
@@ -184,7 +184,7 @@ const Checkout: React.FC = () => {
 
         try {
             const res = await fetch(
-                `${BASE}/api/method/store_customizations.api.get_customer_addresses?mobile=${encodeURIComponent(mobile)}`,
+                `${BASE}/api/method/store_customizations.api.checkout.get_customer_addresses?mobile=${encodeURIComponent(mobile)}`,
                 { credentials: 'include' }
             );
             const data = await res.json();
@@ -233,7 +233,7 @@ const Checkout: React.FC = () => {
 
             const csrfToken = await getCsrfToken();
             const res = await fetch(
-                `${BASE}/api/method/store_customizations.api.place_order`,
+                `${BASE}/api/method/store_customizations.api.checkout.place_order`,
                 {
                     method: 'POST',
                     credentials: 'include',

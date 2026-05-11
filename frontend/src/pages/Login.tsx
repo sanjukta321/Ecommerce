@@ -96,7 +96,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError('');
         try {
             await apiPost(
-                '/api/method/store_customizations.api.send_registration_otp',
+                '/api/method/store_customizations.api.registration.send_registration_otp',
                 { contact: email.trim() }
             );
             setSignupStep(2);
@@ -129,7 +129,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError('');
         try {
             await apiPost(
-                '/api/method/store_customizations.api.register_customer',
+                '/api/method/store_customizations.api.registration.register_customer',
                 {
                     contact:   email.trim(),
                     otp:       otp.trim(),
@@ -161,7 +161,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError('');
         try {
             await apiPost(
-                '/api/method/store_customizations.api.send_forgot_password_otp',
+                '/api/method/store_customizations.api.registration.send_forgot_password_otp',
                 { contact: forgotContact.trim() }
             );
             setForgotStep(2);
@@ -182,7 +182,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError('');
         try {
             await apiPost(
-                '/api/method/store_customizations.api.reset_password_with_otp',
+                '/api/method/store_customizations.api.registration.reset_password_with_otp',
                 { contact: forgotContact.trim(), otp: forgotOtp.trim(), new_password: newPassword }
             );
             // Success — return to login with confirmation
@@ -217,7 +217,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             // Get roles to decide redirect
             const rolesRes = await fetch(
-                `${BASE}/api/method/store_customizations.api.get_current_user_roles`,
+                `${BASE}/api/method/store_customizations.api.auth.get_current_user_roles`,
                 { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '') } }
             );
             const rolesData = await rolesRes.json();

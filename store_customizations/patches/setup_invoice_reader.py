@@ -1,7 +1,8 @@
+"""Convert setup_invoice_reader one-time script to a registered Frappe patch."""
 import frappe
 
 
-def run():
+def execute():
     # 1. Create Role
     if not frappe.db.exists("Role", "Invoice Reader"):
         role = frappe.new_doc("Role")

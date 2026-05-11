@@ -72,7 +72,7 @@ export default function SellerReturns() {
     // Optimistic update
     setReturns(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
     try {
-      await fetch(`${BASE}/api/method/store_customizations.api.handle_return`, {
+      await fetch(`${BASE}/api/method/store_customizations.api.orders.handle_return`, {
         method: 'POST',
         credentials: 'include',
         headers: {

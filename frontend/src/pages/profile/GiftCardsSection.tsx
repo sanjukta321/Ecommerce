@@ -48,7 +48,7 @@ function CheckBalanceModal({ onClose }: { onClose: () => void }) {
         setLoading(true); setError(''); setResult(null);
         try {
             const res = await api<{ message: typeof result }>(
-                `/api/method/store_customizations.api.check_gift_card_balance?card_number=${encodeURIComponent(cardNumber)}&pin=${encodeURIComponent(pin)}`
+                `/api/method/store_customizations.api.customer.check_gift_card_balance?card_number=${encodeURIComponent(cardNumber)}&pin=${encodeURIComponent(pin)}`
             );
             setResult(res.message);
         } catch (e) {
@@ -165,7 +165,7 @@ function BuyGiftCardModal({ onClose, onPurchased }: { onClose: () => void; onPur
         setBuying(true); setError('');
         try {
             const res = await post<{ message: PurchasedCard }>(
-                '/api/method/store_customizations.api.buy_gift_card',
+                '/api/method/store_customizations.api.customer.buy_gift_card',
                 { amount: finalAmount, recipient_name: recipientName, recipient_email: recipientEmail, gift_message: message }
             );
             setPurchased(res.message);
@@ -319,7 +319,7 @@ const GiftCardsSection: React.FC<Props> = ({ points, value }) => {
     useEffect(() => {
         if (cardsLoaded) return;
         setCardsLoaded(true);
-        api<{ message: GiftCard[] }>('/api/method/store_customizations.api.get_my_gift_cards')
+        api<{ message: GiftCard[] }>('/api/method/store_customizations.api.customer.get_my_gift_cards')
             .then(r => setMyCards(r.message || []))
             .catch(() => {});
     }, []);
@@ -422,7 +422,7 @@ const GiftCardsSection: React.FC<Props> = ({ points, value }) => {
                 <BuyGiftCardModal
                     onClose={() => setShowBuyModal(false)}
                     onPurchased={() => {
-                        api<{ message: GiftCard[] }>('/api/method/store_customizations.api.get_my_gift_cards')
+                        api<{ message: GiftCard[] }>('/api/method/store_customizations.api.customer.get_my_gift_cards')
                             .then(r => setMyCards(r.message || [])).catch(() => {});
                     }}
                 />

@@ -34,7 +34,7 @@ const NotificationsSection: React.FC<Props> = ({ prefs, onChange }) => {
         onChange(updated);
         setSaving(true); setSaved(false);
         try {
-            await post('/api/method/store_customizations.api.save_notification_settings', {
+            await post('/api/method/store_customizations.api.notifications.save_notification_settings', {
                 enable_email: updated.enable_email ? 1 : 0,
                 enable_mention: updated.enable_mention ? 1 : 0,
                 enable_assignment: updated.enable_assignment ? 1 : 0,

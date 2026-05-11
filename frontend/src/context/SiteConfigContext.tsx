@@ -62,7 +62,7 @@ export function SiteConfigProvider({ children }: { children: React.ReactNode }) 
     const load = async (attempt = 1) => {
       try {
         const res = await fetch(
-          `${BASE}/api/method/store_customizations.api.get_site_config`,
+          `${BASE}/api/method/store_customizations.api.admin.get_site_config`,
           { cache: 'no-store' }
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

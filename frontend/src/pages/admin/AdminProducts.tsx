@@ -123,7 +123,7 @@ export default function AdminProducts() {
   const fetchItems = useCallback(async () => {
     setLoading(true); setPageError('');
     try {
-      const d = await api<{ message: Item[] }>('/api/method/store_customizations.api.get_admin_products');
+      const d = await api<{ message: Item[] }>('/api/method/store_customizations.api.admin.get_admin_products');
       setItems(d.message || []);
     } catch (e) {
       setPageError(e instanceof Error ? e.message : 'Failed to load products.');
@@ -132,14 +132,14 @@ export default function AdminProducts() {
 
   const fetchItemGroups = useCallback(async () => {
     try {
-      const d = await api<{ message: ItemGroup[] }>('/api/method/store_customizations.api.get_item_groups');
+      const d = await api<{ message: ItemGroup[] }>('/api/method/store_customizations.api.products.get_item_groups');
       setItemGroups(d.message || []);
     } catch {}
   }, []);
 
   const fetchAttrs = useCallback(async () => {
     try {
-      const d = await api<{ message: AttrDef[] }>('/api/method/store_customizations.api.get_item_attributes');
+      const d = await api<{ message: AttrDef[] }>('/api/method/store_customizations.api.products.get_item_attributes');
       setAllAttrs(d.message || []);
     } catch {}
   }, []);
@@ -156,7 +156,7 @@ export default function AdminProducts() {
     if (!newGroupName.trim()) { setGroupError('Group name is required.'); return; }
     setAddingGroup(true); setGroupError('');
     try {
-      await post('/api/method/store_customizations.api.create_item_group', {
+      await post('/api/method/store_customizations.api.products.create_item_group', {
         group_name: newGroupName.trim(), parent_item_group: newGroupParent || 'All Item Groups',
       });
       await fetchItemGroups();
@@ -196,7 +196,7 @@ export default function AdminProducts() {
     if (isNaN(stock) || stock < 0) { setSimpleError('Stock must be 0 or more.'); return; }
     setSimpleSaving(true); setSimpleError('');
     try {
-      await post('/api/method/store_customizations.api.save_admin_product', {
+      await post('/api/method/store_customizations.api.admin.save_admin_product', {
         item_name:   simpleForm.item_name.trim(),
         item_group:  simpleForm.item_group,
         price:       parseFloat(simpleForm.standard_rate),
@@ -226,7 +226,7 @@ export default function AdminProducts() {
         attr_values: Record<string, string[]>;
         variants: { item_code: string; attrs: Record<string,string>; price: number; stock: number; image: string; enabled: boolean }[];
         images: string[];
-      } }>(`/api/method/store_customizations.api.get_template_product?item_code=${encodeURIComponent(item.name)}`);
+      } }>(`/api/method/store_customizations.api.admin.get_template_product?item_code=${encodeURIComponent(item.name)}`);
       const t = d.message;
       setWizard({
         step: 1,
@@ -307,7 +307,7 @@ export default function AdminProducts() {
     if (vals.length === 0) { alert('Add at least one value.'); return; }
     setAddingAttr(true);
     try {
-      await post('/api/method/store_customizations.api.create_item_attribute', {
+      await post('/api/method/store_customizations.api.products.create_item_attribute', {
         attribute_name: newAttrName.trim(), values: JSON.stringify(vals),
       });
       await fetchAttrs();
@@ -339,7 +339,7 @@ export default function AdminProducts() {
     const imgs = wizard.images.filter(Boolean);
     setWizSaving(true); setWizError('');
     try {
-      await post('/api/method/store_customizations.api.save_template_product', {
+      await post('/api/method/store_customizations.api.admin.save_template_product', {
         item_name:   wizard.item_name.trim(),
         item_group:  wizard.item_group,
         description: wizard.description,
@@ -365,7 +365,7 @@ export default function AdminProducts() {
   const saveStock = async (itemName: string) => {
     setStockSaving(true);
     try {
-      await post('/api/method/store_customizations.api.update_item_stock', {
+      await post('/api/method/store_customizations.api.admin.update_item_stock', {
         item_code: itemName, qty: parseFloat(stockQty) || 0,
       });
       setStockEditItem(null); fetchItems();
@@ -392,7 +392,7 @@ export default function AdminProducts() {
     if (!templateVariants[code]) {
       try {
         const d = await api<{ message: { variants: VariantRow[] } }>(
-          `/api/method/store_customizations.api.get_template_product?item_code=${encodeURIComponent(code)}`
+          `/api/method/store_customizations.api.admin.get_template_product?item_code=${encodeURIComponent(code)}`
         );
         setTemplateVariants(tv => ({ ...tv, [code]: d.message.variants || [] }));
       } catch {}
@@ -887,7 +887,7 @@ export default function AdminProducts() {
                     <input className="admin-form-input" placeholder="e.g. Violet" value={newAttrVals} onChange={e => setNewAttrVals(e.target.value)}
                       onKeyDown={async e => {
                         if (e.key === 'Enter' && newAttrVals.trim()) {
-                          await post('/api/method/store_customizations.api.add_attribute_value', { attribute_name: attrPickName, value: newAttrVals.trim() });
+                          await post('/api/method/store_customizations.api.products.add_attribute_value', { attribute_name: attrPickName, value: newAttrVals.trim() });
                           await fetchAttrs();
                           setAttrPickVals(prev => [...prev, newAttrVals.trim()]);
                           setNewAttrVals('');
@@ -895,7 +895,7 @@ export default function AdminProducts() {
                       }} />
                     <button type="button" onClick={async () => {
                       if (!newAttrVals.trim()) return;
-                      await post('/api/method/store_customizations.api.add_attribute_value', { attribute_name: attrPickName, value: newAttrVals.trim() });
+                      await post('/api/method/store_customizations.api.products.add_attribute_value', { attribute_name: attrPickName, value: newAttrVals.trim() });
                       await fetchAttrs();
                       setAttrPickVals(prev => [...prev, newAttrVals.trim()]);
                       setNewAttrVals('');

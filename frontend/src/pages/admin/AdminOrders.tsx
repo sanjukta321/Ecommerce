@@ -53,7 +53,7 @@ async function getCsrfToken(): Promise<string> {
   if (meta && meta !== 'None') return meta;
   if (_csrfCache) return _csrfCache;
   try {
-    const res = await fetch(`${BASE}/api/method/store_customizations.api.get_csrf_token`, { credentials: 'include' });
+    const res = await fetch(`${BASE}/api/method/store_customizations.api.customer.get_csrf_token`, { credentials: 'include' });
     const d = await res.json();
     _csrfCache = d.message || '';
     return _csrfCache;
@@ -703,7 +703,7 @@ export default function AdminOrders() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await apiFetch('/api/method/store_customizations.api.get_admin_orders?limit=200');
+      const res = await apiFetch('/api/method/store_customizations.api.orders.get_admin_orders?limit=200');
       const data = await res.json();
       let list: SalesOrder[] = data.message || [];
       if (customerFilter) list = list.filter(o => o.customer === customerFilter);
@@ -739,7 +739,7 @@ export default function AdminOrders() {
     if (!window.confirm(`Mark order ${order.name} as shipped?`)) return;
     setActionLoading(order.name + ':ship');
     try {
-      const res = await apiFetch('/api/method/store_customizations.api.create_delivery_note', { method: 'POST', body: JSON.stringify({ sales_order: order.name }) });
+      const res = await apiFetch('/api/method/store_customizations.api.orders.create_delivery_note', { method: 'POST', body: JSON.stringify({ sales_order: order.name }) });
       const data = await res.json();
       if (data.exc) throw new Error(data.exc_type || 'Error');
       await fetchOrders();
@@ -752,7 +752,7 @@ export default function AdminOrders() {
     if (!window.confirm(`Record cash collected for order ${order.name}?`)) return;
     setActionLoading(order.name + ':pay');
     try {
-      const res = await apiFetch('/api/method/store_customizations.api.collect_cod_payment', { method: 'POST', body: JSON.stringify({ sales_invoice: order.sales_invoice }) });
+      const res = await apiFetch('/api/method/store_customizations.api.orders.collect_cod_payment', { method: 'POST', body: JSON.stringify({ sales_invoice: order.sales_invoice }) });
       const data = await res.json();
       if (data.exc) throw new Error(data.exc_type || 'Error');
       await fetchOrders();

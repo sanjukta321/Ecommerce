@@ -126,7 +126,7 @@ const Orders: React.FC = () => {
         const mobile = localStorage.getItem('checkout_mobile') || '';
         const params = mobile ? `?mobile=${encodeURIComponent(mobile)}` : '';
         setLoading(true);
-        fetch(`${BASE}/api/method/store_customizations.api.get_my_orders${params}`, {
+        fetch(`${BASE}/api/method/store_customizations.api.orders.get_my_orders${params}`, {
             credentials: 'include',
             headers: { 'X-Frappe-CSRF-Token': getCSRF() },
         })
@@ -142,7 +142,7 @@ const Orders: React.FC = () => {
         if (!confirm('Cancel this order?')) return;
         setActionLoading(p => ({ ...p, [orderName]: true }));
         try {
-            const res = await fetch(`${BASE}/api/method/store_customizations.api.cancel_order`, {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.orders.cancel_order`, {
                 method: 'POST', credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': getCSRF() },
                 body: new URLSearchParams({ sales_order: orderName }).toString(),
@@ -166,7 +166,7 @@ const Orders: React.FC = () => {
         if (!returnReason.trim()) return;
         setActionLoading(p => ({ ...p, [orderName]: true }));
         try {
-            const res = await fetch(`${BASE}/api/method/store_customizations.api.request_return`, {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.orders.request_return`, {
                 method: 'POST', credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': getCSRF() },
                 body: new URLSearchParams({ sales_order: orderName, reason: returnReason }).toString(),
@@ -342,7 +342,7 @@ const Orders: React.FC = () => {
                                     <div className="order-actions">
                                         {order.sales_invoice && (
                                             <a
-                                                href={`${BASE}/api/method/store_customizations.api.download_invoice_pdf?sales_order=${encodeURIComponent(order.name)}`}
+                                                href={`${BASE}/api/method/store_customizations.api.orders.download_invoice_pdf?sales_order=${encodeURIComponent(order.name)}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="order-action-btn download-btn"

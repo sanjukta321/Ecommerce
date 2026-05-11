@@ -182,7 +182,7 @@ const ProductDetail: React.FC = () => {
         }
 
         fetch(
-            `${BASE}/api/method/store_customizations.api.get_product?item_code=${encodeURIComponent(id)}`,
+            `${BASE}/api/method/store_customizations.api.products.get_product?item_code=${encodeURIComponent(id)}`,
             { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
         )
             .then(r => r.json())
@@ -194,7 +194,7 @@ const ProductDetail: React.FC = () => {
                         setIsTemplate(true);
                         try {
                             const vRes = await fetch(
-                                `${BASE}/api/method/store_customizations.api.get_item_variants?item_code=${encodeURIComponent(item.name)}`,
+                                `${BASE}/api/method/store_customizations.api.products.get_item_variants?item_code=${encodeURIComponent(item.name)}`,
                                 { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
                             );
                             const vJson = await vRes.json();
@@ -213,7 +213,7 @@ const ProductDetail: React.FC = () => {
 
         // Fetch real reviews for this item
         fetch(
-            `${BASE}/api/method/store_customizations.api.get_item_reviews?item_code=${encodeURIComponent(id)}`,
+            `${BASE}/api/method/store_customizations.api.reviews.get_item_reviews?item_code=${encodeURIComponent(id)}`,
             { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
         )
             .then(r => r.json())
@@ -228,7 +228,7 @@ const ProductDetail: React.FC = () => {
 
         // Fetch stock alert subscription status
         fetch(
-            `${BASE}/api/method/store_customizations.api.get_stock_alert_status?item_code=${encodeURIComponent(id)}`,
+            `${BASE}/api/method/store_customizations.api.notifications.get_stock_alert_status?item_code=${encodeURIComponent(id)}`,
             { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken() } }
         )
             .then(r => r.json())
@@ -241,7 +241,7 @@ const ProductDetail: React.FC = () => {
         setStockAlertMsg('');
         const endpoint = stockAlertSubscribed ? 'unsubscribe_stock_alert' : 'subscribe_stock_alert';
         try {
-            const res = await fetch(`${BASE}/api/method/store_customizations.api.${endpoint}`, {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.notifications.${endpoint}`, {
                 method: 'POST', credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrfToken() },
                 body: new URLSearchParams({ item_code: itemCode }).toString(),

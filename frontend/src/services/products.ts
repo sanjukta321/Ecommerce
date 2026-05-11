@@ -5,7 +5,7 @@
  * Backend doctype: Item
  *
  * To add a new product endpoint:
- *   1. Add the Python function in store_customizations/api.py
+ *   1. Add the Python functions in the appropriate store_customizations/api/<module>.py file
  *   2. Add the TypeScript function below
  */
 
@@ -29,7 +29,7 @@ export interface Product {
 export async function getProducts(itemGroup?: string, limit = 100): Promise<Product[]> {
   const groupParam = itemGroup ? `&item_group=${encodeURIComponent(itemGroup)}` : '';
   const res = await api<{ message: Product[] }>(
-    `/api/method/store_customizations.api.get_all_products?limit=${limit}${groupParam}`
+    `/api/method/store_customizations.api.products.get_all_products?limit=${limit}${groupParam}`
   );
   return res.message ?? [];
 }

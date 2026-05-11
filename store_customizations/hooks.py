@@ -64,6 +64,15 @@ home_page = "shop"
 # 	"Role": "home_page"
 # }
 
+# Custom fields managed as fixtures (source of truth for new installations).
+# Existing sites rely on the patches in patches.txt for their initial setup.
+fixtures = [
+    {
+        "dt": "Custom Field",
+        "filters": [["module", "=", "Store Customizations"]],
+    }
+]
+
 # SPA routing — all React Router paths serve the same index.html shell.
 # React then handles client-side navigation.
 website_route_rules = [

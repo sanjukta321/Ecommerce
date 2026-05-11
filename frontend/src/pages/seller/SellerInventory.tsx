@@ -37,7 +37,7 @@ export default function SellerInventory() {
     setLoading(true);
     try {
       const res = await apiFetch<{ message: InventoryItem[] }>(
-        '/api/method/store_customizations.api.get_seller_inventory'
+        '/api/method/store_customizations.api.admin.get_seller_inventory'
       );
       setItems(res.message || []);
     } catch {
@@ -54,7 +54,7 @@ export default function SellerInventory() {
     if (newQty === undefined || newQty === '') return;
     setSavingItem(itemName);
     try {
-      await apiFetch('/api/method/store_customizations.api.update_item_stock', {
+      await apiFetch('/api/method/store_customizations.api.admin.update_item_stock', {
         method: 'POST',
         body: JSON.stringify({ item_code: itemName, qty: parseFloat(newQty) || 0 }),
       });

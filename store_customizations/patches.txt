@@ -7,3 +7,4 @@
 store_customizations.patches.add_pan_custom_fields
 store_customizations.patches.add_payment_storage_fields
 store_customizations.patches.add_gift_card_fields
+store_customizations.patches.setup_invoice_reader

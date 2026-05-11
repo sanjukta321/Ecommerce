@@ -26,7 +26,7 @@ const SavedUPISection: React.FC<Props> = ({ items, onChange }) => {
     const add = async () => {
         setMsg('');
         try {
-            const res = await post<{ message: UPIItem[] }>('/api/method/store_customizations.api.add_upi', { upi_id: newUpi });
+            const res = await post<{ message: UPIItem[] }>('/api/method/store_customizations.api.customer.add_upi', { upi_id: newUpi });
             onChange(res.message || []);
             setNewUpi('');
         } catch (e) { setMsg(e instanceof Error ? e.message : 'Failed to save UPI'); }
@@ -35,7 +35,7 @@ const SavedUPISection: React.FC<Props> = ({ items, onChange }) => {
     const remove = async (id: string) => {
         setRemoving(id);
         try {
-            const res = await post<{ message: UPIItem[] }>('/api/method/store_customizations.api.remove_upi', { upi_id: id });
+            const res = await post<{ message: UPIItem[] }>('/api/method/store_customizations.api.customer.remove_upi', { upi_id: id });
             onChange(res.message || []);
         } catch (e) { setMsg(e instanceof Error ? e.message : 'Failed to remove'); }
         finally { setRemoving(null); }

@@ -2,7 +2,7 @@
  * Authentication service.
  *
  * Handles login, logout, session check, and role-based redirect logic.
- * All role detection goes through store_customizations.api.get_current_user_roles
+ * All role detection goes through store_customizations.api.auth.get_current_user_roles
  * (a whitelisted custom Frappe endpoint — see apps/store_customizations/api.py).
  *
  * To add a new role check: update getRoles() consumers here; backend is already set.
@@ -35,13 +35,13 @@ export async function logout(): Promise<void> {
 
 /**
  * Get roles of the currently logged-in user.
- * Calls store_customizations.api.get_current_user_roles (whitelisted).
+ * Calls store_customizations.api.auth.get_current_user_roles (whitelisted).
  *
  * To add a new role to the check: just reference it from the returned array.
  */
 export async function getRoles(): Promise<RolesResult> {
   const res = await api<{ message: RolesResult }>(
-    '/api/method/store_customizations.api.get_current_user_roles'
+    '/api/method/store_customizations.api.auth.get_current_user_roles'
   );
   return res.message ?? { roles: [], user: 'Guest' };
 }

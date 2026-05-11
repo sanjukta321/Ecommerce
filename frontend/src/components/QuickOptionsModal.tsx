@@ -59,7 +59,7 @@ const QuickOptionsModal: React.FC<Props> = ({ id, name, image, price, onClose })
 
     useEffect(() => {
         api<{ message: VariantData }>(
-            `/api/method/store_customizations.api.get_item_variants?item_code=${encodeURIComponent(id)}`
+            `/api/method/store_customizations.api.products.get_item_variants?item_code=${encodeURIComponent(id)}`
         )
             .then(res => {
                 if (res.message) {

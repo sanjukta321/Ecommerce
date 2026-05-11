@@ -105,10 +105,10 @@ export default function AdminDashboard() {
       try {
         const [summaryRes, diagRes, ordersRes, itemsRes] = await Promise.all([
           fetchJson<{ message: DashboardData }>(
-            '/api/method/store_customizations.api.get_admin_summary'
+            '/api/method/store_customizations.api.orders.get_admin_summary'
           ),
           fetchJson<{ message: DiagnosticInfo }>(
-            '/api/method/store_customizations.api.check_products_setup'
+            '/api/method/store_customizations.api.products.check_products_setup'
           ),
           fetchJson<{ data: SalesOrder[] }>(
             '/api/resource/Sales%20Order?fields=["grand_total","status","transaction_date","customer_name","name"]&limit=10&order_by=creation desc'

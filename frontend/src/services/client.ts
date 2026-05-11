@@ -4,7 +4,7 @@
  * CSRF token strategy (in priority order):
  *  1. window.frappe.csrf_token — injected by Frappe via <!-- csrf_token --> in www/index.html
  *     This is always present when the app is served through Frappe.
- *  2. API fallback — GET /api/method/store_customizations.api.get_csrf_token
+ *  2. API fallback — GET /api/method/store_customizations.api.customer.get_csrf_token
  *     Used in local dev when the app runs on a separate Vite port (no Frappe template).
  */
 
@@ -44,7 +44,7 @@ function resolveToken(): Promise<string> {
 
   // Fetch from the API (only runs in dev without the Frappe template)
   if (!_tokenFetch) {
-    _tokenFetch = fetch(`${BASE_URL}/api/method/store_customizations.api.get_csrf_token`, {
+    _tokenFetch = fetch(`${BASE_URL}/api/method/store_customizations.api.customer.get_csrf_token`, {
       credentials: 'include',
     })
       .then(r => r.json())

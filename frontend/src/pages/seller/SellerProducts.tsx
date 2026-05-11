@@ -114,7 +114,7 @@ export default function SellerProducts() {
         });
       } else {
         // Create: use custom endpoint so item_code is auto-generated
-        await apiFetch('/api/method/store_customizations.api.save_seller_product', {
+        await apiFetch('/api/method/store_customizations.api.admin.save_seller_product', {
           method: 'POST',
           body: JSON.stringify({
             item_name:   form.item_name,

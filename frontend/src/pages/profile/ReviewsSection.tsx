@@ -57,7 +57,7 @@ const ReviewsSection: React.FC<Props> = ({ reviews, reviewable, onReviewSaved })
         setSaving(true); setMsg('');
         try {
             const res = await post<{ message: { name: string; item: string } }>(
-                '/api/method/store_customizations.api.save_item_review',
+                '/api/method/store_customizations.api.reviews.save_item_review',
                 { item_code: writing!.item_code, rating, title, body }
             );
             onReviewSaved({

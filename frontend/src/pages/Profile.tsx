@@ -116,7 +116,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
             const uploadData = await uploadRes.json();
             const fileUrl: string = uploadData.message?.file_url || '';
             if (!fileUrl) throw new Error('No file_url in response');
-            const updateRes = await fetch(`${BASE}/api/method/store_customizations.api.update_profile_photo`, {
+            const updateRes = await fetch(`${BASE}/api/method/store_customizations.api.auth.update_profile_photo`, {
                 method: 'POST', credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrf },
                 body: new URLSearchParams({ file_url: fileUrl }).toString(),
@@ -137,7 +137,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         const csrf = getCSRF();
         const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
         try {
-            const res = await fetch(`${BASE}/api/method/store_customizations.api.set_default_address`, {
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.addresses.set_default_address`, {
                 method: 'POST', credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrf },
                 body: new URLSearchParams({ address_name: addressName }).toString(),
@@ -156,7 +156,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
 
     // ── Data fetching ──────────────────────────────────────────
     useEffect(() => {
-        api<{ message: UserData }>('/api/method/store_customizations.api.get_current_user_profile')
+        api<{ message: UserData }>('/api/method/store_customizations.api.auth.get_current_user_profile')
             .then(res => {
                 const raw = res.message || {};
                 const d: UserData = {
@@ -171,12 +171,12 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
             .catch(() => setError('Could not load profile. Please refresh.'))
             .finally(() => setLoading(false));
 
-        api<{ message: AddressData[] }>('/api/method/store_customizations.api.get_user_addresses')
+        api<{ message: AddressData[] }>('/api/method/store_customizations.api.addresses.get_user_addresses')
             .then(res => setAddresses(res.message || []))
             .catch(() => {})
             .finally(() => setAddrLoading(false));
 
-        api<{ message: typeof panData }>('/api/method/store_customizations.api.get_pan_info')
+        api<{ message: typeof panData }>('/api/method/store_customizations.api.customer.get_pan_info')
             .then(res => {
                 const p = res.message || {};
                 setPanData({ pan_number: p.pan_number || '', pan_holder_name: p.pan_holder_name || '', pan_dob: p.pan_dob || '', pan_verified: !!p.pan_verified });
@@ -205,7 +205,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                 payload.mobile_no = form.mobile_no;
             }
             const res = await post<{ message: UserData }>(
-                '/api/method/store_customizations.api.update_current_user_profile', payload
+                '/api/method/store_customizations.api.auth.update_current_user_profile', payload
             );
             const updated = res.message || form;
             setUserData(updated); setForm(updated);
@@ -247,7 +247,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         if (!window.confirm('Delete this address? This cannot be undone.')) return;
         setDeletingAddr(addrName);
         try {
-            await post('/api/method/store_customizations.api.delete_user_address', { address_name: addrName });
+            await post('/api/method/store_customizations.api.addresses.delete_user_address', { address_name: addrName });
             setAddresses(prev => prev.filter(a => a.name !== addrName));
         } catch (err) {
             showNavToast(err instanceof Error ? err.message : 'Failed to delete address.');
@@ -271,7 +271,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                 ...(editingAddr ? { address_name: editingAddr } : {}),
             };
             const res = await post<{ message: AddressData }>(
-                '/api/method/store_customizations.api.save_user_address', payload
+                '/api/method/store_customizations.api.addresses.save_user_address', payload
             );
             const saved = res.message;
             setAddresses(prev =>
@@ -288,16 +288,16 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
     const loadPayments = () => {
         if (paymentsLoaded) return;
         setPaymentsLoaded(true);
-        api<{ message: { points: number; value: number } }>('/api/method/store_customizations.api.get_loyalty_balance')
+        api<{ message: { points: number; value: number } }>('/api/method/store_customizations.api.customer.get_loyalty_balance')
             .then(r => setLoyaltyBalance(r.message || { points: 0, value: 0 })).catch(() => {});
-        api<{ message: { upi: any[]; cards: any[] } }>('/api/method/store_customizations.api.get_saved_payments')
+        api<{ message: { upi: any[]; cards: any[] } }>('/api/method/store_customizations.api.customer.get_saved_payments')
             .then(r => { setSavedUpi(r.message?.upi || []); setSavedCards(r.message?.cards || []); }).catch(() => {});
     };
 
     const loadCoupons = () => {
         if (coupons.length || couponsLoading) return;
         setCouponsLoading(true);
-        api<{ message: any[] }>('/api/method/store_customizations.api.get_user_coupons')
+        api<{ message: any[] }>('/api/method/store_customizations.api.customer.get_user_coupons')
             .then(r => setCoupons(r.message || [])).catch(() => {}).finally(() => setCouponsLoading(false));
     };
 
@@ -305,8 +305,8 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         if (reviews.length || reviewsLoading) return;
         setReviewsLoading(true);
         Promise.all([
-            api<{ message: any[] }>('/api/method/store_customizations.api.get_user_reviews'),
-            api<{ message: any[] }>('/api/method/store_customizations.api.get_reviewable_items'),
+            api<{ message: any[] }>('/api/method/store_customizations.api.reviews.get_user_reviews'),
+            api<{ message: any[] }>('/api/method/store_customizations.api.reviews.get_reviewable_items'),
         ]).then(([rv, ri]) => {
             setReviews(rv.message || []);
             setReviewable(ri.message || []);
@@ -314,7 +314,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
     };
 
     const loadNotifications = () => {
-        api<{ message: typeof notifPrefs }>('/api/method/store_customizations.api.get_notification_settings')
+        api<{ message: typeof notifPrefs }>('/api/method/store_customizations.api.notifications.get_notification_settings')
             .then(r => { if (r.message) setNotifPrefs(r.message); }).catch(() => {});
     };
 
@@ -336,7 +336,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         setPanSaving(true); setPanMsg('');
         try {
             const res = await post<{ message: typeof panData }>(
-                '/api/method/store_customizations.api.save_pan_info',
+                '/api/method/store_customizations.api.customer.save_pan_info',
                 { pan_number: panForm.pan_number, pan_holder_name: panForm.pan_holder_name, pan_dob: panForm.pan_dob }
             );
             const updated = res.message || panData;

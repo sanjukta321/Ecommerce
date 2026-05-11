@@ -1,3 +1,12 @@
+"""
+store_customizations — Kurti variant data utility.
+
+One-shot script to populate Kurti item variant images, prices, and stock.
+This is a DATA operation (not a schema migration), so it is NOT a Frappe patch.
+
+To run manually:
+    bench --site <site_name> execute store_customizations.setup_variants.setup_kurti_variants
+"""
 import frappe
 
 COLOUR_DATA = {

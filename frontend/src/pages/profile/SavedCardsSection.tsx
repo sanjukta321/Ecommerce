@@ -27,7 +27,7 @@ const SavedCardsSection: React.FC<Props> = ({ items, onChange }) => {
         }
         setSaving(true); setMsg('');
         try {
-            const res = await post<{ message: CardItem[] }>('/api/method/store_customizations.api.add_card', form);
+            const res = await post<{ message: CardItem[] }>('/api/method/store_customizations.api.customer.add_card', form);
             onChange(res.message || []);
             setShowForm(false); setForm({ ...EMPTY_FORM });
         } catch (e) { setMsg(e instanceof Error ? e.message : 'Failed to save card'); }
