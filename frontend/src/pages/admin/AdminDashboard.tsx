@@ -254,7 +254,7 @@ export default function AdminDashboard() {
 
       {/* ── Diagnostic / System Status ── */}
       {!loading && diag && (
-        <div className="admin-section" style={{ marginBottom: 22, border: '1px border #e2e8f0' }}>
+        <div className="admin-section">
           <div className="admin-section-header">
             <div>
               <p className="admin-section-title">Product Check / System Status</p>
