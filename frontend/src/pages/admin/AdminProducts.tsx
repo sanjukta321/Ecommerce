@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { api, post, del, BASE_URL as BASE } from '../../services/client';
 
@@ -74,6 +74,9 @@ export default function AdminProducts() {
   const [items, setItems]       = useState<Item[]>([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'low' | 'out'>('all');
   const [pageError, setPageError] = useState('');
 
   // Item groups
@@ -146,9 +149,20 @@ export default function AdminProducts() {
 
   useEffect(() => { fetchItems(); fetchItemGroups(); fetchAttrs(); }, []);
 
-  const filtered = items.filter(i =>
-    (i.item_name || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    let list = items;
+    if (statusFilter === 'active')   list = list.filter(i => !i.disabled);
+    if (statusFilter === 'inactive') list = list.filter(i => !!i.disabled);
+    if (categoryFilter !== 'all')    list = list.filter(i => i.item_group === categoryFilter);
+    if (stockFilter === 'in')  list = list.filter(i => (i.actual_qty ?? 0) > 10);
+    if (stockFilter === 'low') list = list.filter(i => (i.actual_qty ?? 0) > 0 && (i.actual_qty ?? 0) <= 10);
+    if (stockFilter === 'out') list = list.filter(i => (i.actual_qty ?? 0) <= 0);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(i => (i.item_name || '').toLowerCase().includes(q));
+    }
+    return list;
+  }, [items, statusFilter, categoryFilter, stockFilter, search]);
 
   // ── Item Group helpers ────────────────────────────────────────────────────
 
@@ -389,14 +403,12 @@ export default function AdminProducts() {
   const toggleTemplate = async (code: string) => {
     if (expandedTemplate === code) { setExpandedTemplate(null); return; }
     setExpandedTemplate(code);
-    if (!templateVariants[code]) {
-      try {
-        const d = await api<{ message: { variants: VariantRow[] } }>(
-          `/api/method/store_customizations.api.admin.get_template_product?item_code=${encodeURIComponent(code)}`
-        );
-        setTemplateVariants(tv => ({ ...tv, [code]: d.message.variants || [] }));
-      } catch {}
-    }
+    try {
+      const d = await api<{ message: { variants: VariantRow[] } }>(
+        `/api/method/store_customizations.api.admin.get_template_product?item_code=${encodeURIComponent(code)}`
+      );
+      setTemplateVariants(tv => ({ ...tv, [code]: d.message.variants || [] }));
+    } catch {}
   };
 
   // ── Shared group dropdown ─────────────────────────────────────────────────
@@ -439,6 +451,37 @@ export default function AdminProducts() {
               </svg>
               Add Product
             </button>
+          </div>
+        </div>
+
+        {/* ── Filters ─────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+          <div className="admin-filter-tabs">
+            {(['all', 'active', 'inactive'] as const).map(s => (
+              <button key={s} className={`admin-filter-tab${statusFilter === s ? ' active' : ''}`} onClick={() => setStatusFilter(s)}>
+                {s === 'all' ? 'All' : s === 'active' ? 'Active' : 'Inactive'}
+              </button>
+            ))}
+          </div>
+
+          <select className="admin-select" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+            <option value="all">All Categories</option>
+            {itemGroups.map(g => (
+              <option key={g.name} value={g.name}>{g.name}</option>
+            ))}
+          </select>
+
+          <div className="admin-filter-tabs">
+            {([
+              { key: 'all', label: 'All Stock' },
+              { key: 'in',  label: 'In Stock' },
+              { key: 'low', label: 'Low Stock' },
+              { key: 'out', label: 'Out of Stock' },
+            ] as const).map(s => (
+              <button key={s.key} className={`admin-filter-tab${stockFilter === s.key ? ' active' : ''}`} onClick={() => setStockFilter(s.key)}>
+                {s.label}
+              </button>
+            ))}
           </div>
         </div>
 

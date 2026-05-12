@@ -495,6 +495,20 @@
 
 .admin-filter-tab:hover:not(.active) { background: #f1f5f9; }
 
+/* Category / generic select in filter bar */
+.admin-select {
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #334155;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+  height: 34px;
+}
+.admin-select:focus { border-color: #3b82f6; }
+
 /* Search bar */
 .admin-search-bar {
   display: flex;

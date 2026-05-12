@@ -138,7 +138,8 @@ def get_admin_products(limit=200):
             stock_map[b["item_code"]] = stock_map.get(b["item_code"], 0) + (b["actual_qty"] or 0)
 
     for item in items:
-        item["actual_qty"] = stock_map.get(item["name"], 0)
+        if not item.get("has_variants"):
+            item["actual_qty"] = stock_map.get(item["name"], 0)
 
     # Enrich template items with variant count and price range
     if template_codes:
@@ -171,10 +172,24 @@ def get_admin_products(limit=200):
                 if parent not in tpl_min_price or price < tpl_min_price[parent]:
                     tpl_min_price[parent] = price
 
+        # Aggregate actual stock across all variants per template
+        tpl_stock = {}
+        if variant_codes:
+            variant_bins = frappe.get_all(
+                "Bin",
+                filters={"item_code": ["in", variant_codes]},
+                fields=["item_code", "actual_qty"],
+            )
+            for b in variant_bins:
+                parent = v_parent_map.get(b["item_code"])
+                if parent:
+                    tpl_stock[parent] = tpl_stock.get(parent, 0) + (b["actual_qty"] or 0)
+
         for item in items:
             if item.get("has_variants"):
                 item["variant_count"] = variant_count.get(item["name"], 0)
                 item["selling_price"]  = tpl_min_price.get(item["name"], 0)
+                item["actual_qty"]     = tpl_stock.get(item["name"], 0)
 
     return items
 
