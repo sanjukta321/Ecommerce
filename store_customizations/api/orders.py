@@ -113,17 +113,45 @@ def get_my_orders(mobile=None):
     orders = frappe.get_all(
         "Sales Order",
         filters={"customer": ["in", customer_names]},
-        fields=["name", "grand_total", "status", "transaction_date", "delivery_date", "po_no", "docstatus"],
+        fields=["name", "customer", "customer_name", "grand_total", "status",
+                "transaction_date", "delivery_date", "po_no", "docstatus",
+                "shipping_address_name", "customer_address"],
         order_by="transaction_date desc",
         limit=200,
         ignore_permissions=True,
     )
 
+    # Bulk fetch mobile numbers for all customers in one query
+    all_customers = list({o["customer"] for o in orders if o.get("customer")})
+    mobile_map = {}
+    if all_customers:
+        rows = frappe.get_all("Customer", filters={"name": ["in", all_customers]},
+                              fields=["name", "mobile_no"], ignore_permissions=True)
+        mobile_map = {r["name"]: r["mobile_no"] or "" for r in rows}
+
+    # Bulk fetch all address names needed
+    all_addr_names = list({
+        o.get("shipping_address_name") or o.get("customer_address")
+        for o in orders
+        if o.get("shipping_address_name") or o.get("customer_address")
+    })
+    addr_map = {}
+    if all_addr_names:
+        addr_rows = frappe.get_all("Address", filters={"name": ["in", all_addr_names]},
+                                   fields=["name", "address_line1", "address_line2",
+                                           "city", "state", "pincode"],
+                                   ignore_permissions=True)
+        for a in addr_rows:
+            addr_map[a["name"]] = ", ".join(filter(None, [
+                a.address_line1, a.address_line2,
+                a.city, a.state, a.pincode,
+            ]))
+
     for order in orders:
         items = frappe.get_all(
             "Sales Order Item",
             filters={"parent": order["name"]},
-            fields=["item_code", "item_name", "qty", "rate", "amount", "image"],
+            fields=["item_code", "item_name", "qty", "rate", "amount", "image", "description"],
             ignore_permissions=True,
         )
         for item in items:
@@ -132,6 +160,11 @@ def get_my_orders(mobile=None):
         order["items"] = items
         order["payment_method"] = _decode_po_no(order.pop("po_no"))
         order.update(_order_ecom_status(order["name"], order["status"], order.get("docstatus", 1)))
+
+        # Enrich with address and mobile
+        addr_name = order.pop("shipping_address_name", None) or order.pop("customer_address", None)
+        order["delivery_address"] = addr_map.get(addr_name, "")
+        order["customer_mobile"] = mobile_map.get(order.get("customer", ""), "")
 
     return orders
 
@@ -521,7 +554,7 @@ def get_admin_summary():
         frappe.throw("Not permitted", frappe.PermissionError)
 
     return {
-        "total_orders":    frappe.db.count("Sales Order"),
+        "total_orders":    frappe.db.count("Sales Order", {"docstatus": ["!=", 2]}),
         "total_products":  frappe.db.count("Item"),
         "total_sellers":   frappe.db.count("Supplier"),
         "total_customers": frappe.db.count("Customer"),

@@ -25,6 +25,7 @@ type CheckoutStep = 'mobile' | 'address' | 'payment' | 'success';
 interface SavedAddress {
     name: string;
     address_title: string;
+    address_type: string;
     address_line1: string;
     address_line2: string;
     city: string;
@@ -59,6 +60,7 @@ const Checkout: React.FC = () => {
         city: '',
         state: '',
         landmark: '',
+        address_type: 'Home',
     });
 
     // Step 3: Payment
@@ -103,6 +105,7 @@ const Checkout: React.FC = () => {
             city: addr.city,
             state: addr.state,
             landmark: addr.address_line2,
+            address_type: addr.address_type || 'Home',
         });
         setShowNewAddressForm(false);
         setShowAddressPanel(false);
@@ -360,6 +363,9 @@ const Checkout: React.FC = () => {
                                         <div className="selected-address-info">
                                             <div className="selected-address-name">
                                                 {selectedSavedAddress.address_title}
+                                                <span className="address-type-tag">
+                                                    {selectedSavedAddress.address_type === 'Home' ? '🏠' : selectedSavedAddress.address_type === 'Work' ? '🏢' : '📍'} {selectedSavedAddress.address_type || 'Home'}
+                                                </span>
                                                 <span className="address-badge">Selected</span>
                                             </div>
                                             <div className="selected-address-text">
@@ -379,6 +385,18 @@ const Checkout: React.FC = () => {
                                 {/* New address form — shown when no saved addresses or user chose "Add New" */}
                                 {(showNewAddressForm || savedAddresses.length === 0) && (
                                     <form onSubmit={handleAddressSubmit} style={{ marginTop: selectedSavedAddress ? 16 : 0 }}>
+                                        <div className="address-type-selector">
+                                            {(['Home', 'Work', 'Other'] as const).map(type => (
+                                                <button
+                                                    key={type}
+                                                    type="button"
+                                                    className={`addr-type-btn${address.address_type === type ? ' active' : ''}`}
+                                                    onClick={() => setAddress(a => ({ ...a, address_type: type }))}
+                                                >
+                                                    {type === 'Home' ? '🏠' : type === 'Work' ? '🏢' : '📍'} {type}
+                                                </button>
+                                            ))}
+                                        </div>
                                         <div className="form-grid">
                                             <input type="text" placeholder="Full Name (Required)*" required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} />
                                             <input type="text" placeholder="Pincode (Required)*" required value={address.pincode} onChange={e => setAddress({ ...address, pincode: e.target.value })} />
@@ -598,7 +616,7 @@ const Checkout: React.FC = () => {
                                 className="add-new-address-btn"
                                 onClick={() => {
                                     setSelectedSavedAddress(null);
-                                    setAddress({ fullName: '', pincode: '', addressLine: '', city: '', state: '', landmark: '' });
+                                    setAddress({ fullName: '', pincode: '', addressLine: '', city: '', state: '', landmark: '', address_type: 'Home' });
                                     setShowNewAddressForm(true);
                                     setShowAddressPanel(false);
                                 }}
@@ -620,6 +638,9 @@ const Checkout: React.FC = () => {
                                     <div className="address-panel-item-body">
                                         <div className="address-panel-item-title">
                                             {addr.address_title}
+                                            <span className="address-type-tag" style={{ fontSize: 10 }}>
+                                                {addr.address_type === 'Home' ? '🏠' : addr.address_type === 'Work' ? '🏢' : '📍'} {addr.address_type || 'Home'}
+                                            </span>
                                             {selectedSavedAddress?.name === addr.name && (
                                                 <span className="address-selected-badge">Selected</span>
                                             )}

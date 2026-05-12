@@ -83,6 +83,7 @@ def get_customer_addresses(mobile):
             addresses.append({
                 "name":          addr.name,
                 "address_title": addr.address_title or "",
+                "address_type":  addr.address_type or "Home",
                 "address_line1": addr.address_line1 or "",
                 "address_line2": addr.address_line2 or "",
                 "city":          addr.city or "",
@@ -251,7 +252,7 @@ def _checkout_get_or_create_address(customer, address):
     # Create a new Address record
     addr_doc = frappe.new_doc("Address")
     addr_doc.address_title = title
-    addr_doc.address_type  = "Billing"
+    addr_doc.address_type  = address.get("address_type") or "Home"
     addr_doc.address_line1 = line1
     addr_doc.address_line2 = line2
     addr_doc.city          = city

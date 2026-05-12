@@ -714,13 +714,18 @@ export default function AdminOrders() {
 
   useEffect(() => { fetchOrders(); }, [customerFilter]);
 
-  const counts = useMemo(() => ({
-    total:       orders.length,
-    toDelBill:   orders.filter(o => o.status === 'To Deliver and Bill').length,
-    toDeliver:   orders.filter(o => o.status === 'To Deliver').length,
-    completed:   orders.filter(o => o.status === 'Completed').length,
-    returns:     orders.filter(o => !!o.return_invoice).length,
-  }), [orders]);
+  const counts = useMemo(() => {
+    const returnSet = new Set(orders.filter(o => !!o.return_invoice).map(o => o.name));
+    return {
+      total:     orders.length,
+      toDelBill: orders.filter(o => o.status === 'To Deliver and Bill' && !returnSet.has(o.name)).length,
+      toDeliver: orders.filter(o => o.status === 'To Deliver'          && !returnSet.has(o.name)).length,
+      toBill:    orders.filter(o => o.status === 'To Bill'             && !returnSet.has(o.name)).length,
+      completed: orders.filter(o => o.status === 'Completed'           && !returnSet.has(o.name)).length,
+      returns:   returnSet.size,
+      cancelled: orders.filter(o => o.status === 'Cancelled'           && !returnSet.has(o.name)).length,
+    };
+  }, [orders]);
 
   const filtered = useMemo(() => {
     let list = activeTab === 'all'
@@ -805,11 +810,16 @@ export default function AdminOrders() {
 
         <div className="admin-filter-tabs" style={{ marginBottom: 18 }}>
           {TABS.map(tab => {
-            const count = tab.key === 'all'
-              ? orders.length
-              : tab.key === 'returns'
-                ? orders.filter(o => !!o.return_invoice).length
-                : orders.filter(o => o.status === tab.key).length;
+            const tabCountMap: Record<string, number> = {
+              all:                  counts.total,
+              'To Deliver and Bill': counts.toDelBill,
+              'To Deliver':         counts.toDeliver,
+              'To Bill':            counts.toBill,
+              Completed:            counts.completed,
+              returns:              counts.returns,
+              Cancelled:            counts.cancelled,
+            };
+            const count = tabCountMap[tab.key] ?? 0;
             return (
               <button key={tab.key} className={`admin-filter-tab${activeTab === tab.key ? ' active' : ''}`} onClick={() => setActiveTab(tab.key)} style={activeTab === tab.key ? { borderColor: tab.color, color: tab.color } : {}}>
                 {tab.label}

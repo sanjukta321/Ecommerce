@@ -386,6 +386,41 @@
     letter-spacing: 0.3px;
 }
 
+.address-type-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.addr-type-btn {
+    flex: 1;
+    padding: 10px;
+    border: 1.5px solid var(--glass-border, rgba(180,140,80,0.2));
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-main, #374151);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s;
+}
+
+.addr-type-btn.active {
+    border-color: var(--accent, #b48c50);
+    background: rgba(180,140,80,0.1);
+    color: var(--accent, #b48c50);
+}
+
+.address-type-tag {
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(180,140,80,0.12);
+    color: var(--accent, #b48c50);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+}
+
 .selected-address-text {
     font-size: 13px;
     color: var(--text-dim);

@@ -17,10 +17,21 @@ def get_context(context):
     context.no_header = True
     context.no_breadcrumbs = True
 
-    # Cache-bust the JS/CSS assets using the file's modification timestamp
-    js_path = os.path.join(frappe.get_app_path("store_customizations"), "public", "index.js")
+    # Find hashed index JS file — pick newest by mtime (glob order is arbitrary)
+    public_path = os.path.join(frappe.get_app_path("store_customizations"), "public")
+    import glob
+    hashed = sorted(
+        glob.glob(os.path.join(public_path, "index.*.js")),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    if hashed:
+        context.index_js = "/assets/store_customizations/" + os.path.basename(hashed[0])
+    else:
+        # fallback: legacy fixed name
+        context.index_js = "/assets/store_customizations/index.js"
     try:
-        context.asset_version = int(os.path.getmtime(js_path))
+        context.asset_version = int(os.path.getmtime(os.path.join(public_path, "index.css")))
     except Exception:
         context.asset_version = 1
 
