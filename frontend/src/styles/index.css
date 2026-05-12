@@ -64,6 +64,13 @@ body {
   /* Ensure it's not flex from other files */
 }
 
+/* Admin dashboard: body uses dark-theme --text-main (#E6F1FF).
+   Reset to dark text for all white-background admin surfaces. */
+.admin-layout,
+.admin-modal {
+  color: #1e293b;
+}
+
 a {
   text-decoration: none;
   color: inherit;
