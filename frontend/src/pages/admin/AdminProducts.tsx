@@ -582,7 +582,7 @@ export default function AdminProducts() {
                           </td>
                           <td style={{ paddingLeft: 24, fontSize: 13 }}>
                             {Object.entries(v.attrs).map(([k, val]) => (
-                              <span key={k} style={{ marginRight: 6, background: '#e0e7ff', borderRadius: 4, padding: '1px 6px', fontSize: 11 }}>{k}: {val}</span>
+                              <span key={k} style={{ marginRight: 6, background: '#e0e7ff', borderRadius: 4, padding: '1px 6px', fontSize: 11, color: '#3730a3' }}>{k}: {val}</span>
                             ))}
                           </td>
                           <td style={{ fontSize: 12, color: '#64748b' }}>{item.item_group}</td>
@@ -895,7 +895,7 @@ export default function AdminProducts() {
                   {allAttrs.map(a => (
                     <button key={a.name} type="button" onClick={() => { setAttrPickName(a.name); setAttrPickVals(wizard.selectedAttrs.find(s => s.attribute === a.name)?.values || []); }}
                       style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</span>
+                      <span style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{a.name}</span>
                       <span style={{ fontSize: 12, color: '#94a3b8' }}>{a.values.join(', ')}</span>
                     </button>
                   ))}
@@ -919,7 +919,7 @@ export default function AdminProducts() {
                   {(allAttrs.find(a => a.name === attrPickName)?.values || []).map(v => (
                     <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: 8, background: attrPickVals.includes(v) ? '#ede9fe' : '#f8fafc', border: `1px solid ${attrPickVals.includes(v) ? '#a5b4fc' : '#e2e8f0'}` }}>
                       <input type="checkbox" checked={attrPickVals.includes(v)} onChange={e => setAttrPickVals(prev => e.target.checked ? [...prev, v] : prev.filter(p => p !== v))} />
-                      <span style={{ fontWeight: 500, fontSize: 13 }}>{v}</span>
+                      <span style={{ fontWeight: 500, fontSize: 13, color: '#1e293b' }}>{v}</span>
                     </label>
                   ))}
                 </div>
