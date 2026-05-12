@@ -140,7 +140,7 @@ function AppInner() {
           <Route path="/cart"         element={<Cart />} />
           <Route path="/wishlist"     element={<Wishlist />} />
           <Route path="/orders"       element={<Orders />} />
-          <Route path="/checkout"     element={<Checkout />} />
+          <Route path="/checkout"     element={isLoggedIn ? <Checkout /> : <Navigate to="/login?next=/checkout" replace />} />
           <Route path="/become-seller" element={<SellerLanding />} />
           {/* Seller routes — lazy-loaded, not bundled on initial page load */}
           <Route path="/seller"              element={<Navigate to="/seller/dashboard" replace />} />

@@ -238,7 +238,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     localStorage.setItem('seller_session', 'true');
                     localStorage.setItem('seller_user', displayName);
                 }
-                navigate(isSeller && sellerMode ? '/seller/dashboard' : '/');
+                const nextParam = searchParams.get('next');
+                const safeNext = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/';
+                navigate(isSeller && sellerMode ? '/seller/dashboard' : safeNext);
             }
         } catch (err: any) {
             const msg = err.message || '';

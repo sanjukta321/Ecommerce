@@ -18,12 +18,18 @@
 .image-gallery .main-image {
     width: 100%;
     height: 550px;
-    /* Increased slightly for better vertical/portrait coverage */
     border-radius: 12px;
     overflow: hidden;
     margin-bottom: 20px;
     background: #f8f8f8;
     border: 1px solid var(--glass-border);
+    position: relative;
+    cursor: zoom-in;
+}
+
+@keyframes imgFadeIn {
+    from { opacity: 0.35; transform: scale(1.03); }
+    to   { opacity: 1;    transform: scale(1); }
 }
 
 .image-gallery .main-image img {
@@ -31,7 +37,7 @@
     height: 100%;
     object-fit: cover;
     object-position: top;
-    /* Standard for fashion/clothing detail views */
+    animation: imgFadeIn 0.4s ease;
 }
 
 .thumbnail-strip {
@@ -720,3 +726,106 @@
 .notify-me-btn.subscribed { background: #d1fae5; border-color: #10b981; color: #065f46; }
 .notify-me-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .stock-alert-msg { font-size: 12px; color: #6b7280; }
+
+/* Slideshow dot indicators */
+.slide-dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px 0 6px;
+}
+.slide-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: none;
+    background: #cbd5e1;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s, transform 0.2s;
+}
+.slide-dot.active {
+    background: var(--accent);
+    transform: scale(1.35);
+}
+
+/* Gallery arrows */
+.gallery-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: background 0.15s;
+}
+.gallery-arrow:hover { background: rgba(0, 0, 0, 0.7); }
+.gallery-prev { left: 10px; }
+.gallery-next { right: 10px; }
+
+/* Lightbox */
+.lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.82);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.lightbox-grid {
+    background: #fff;
+    border-radius: 16px;
+    padding: 48px 24px 24px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    position: relative;
+}
+.lightbox-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    color: #374151;
+    line-height: 1;
+    z-index: 1;
+}
+.lightbox-close:hover { color: #ef4444; }
+.lightbox-card {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+    aspect-ratio: 1;
+}
+.lightbox-card:hover { border-color: var(--accent); transform: scale(1.02); }
+.lightbox-card.active { border-color: var(--accent); }
+.lightbox-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+@media (max-width: 600px) {
+    .lightbox-grid { grid-template-columns: repeat(2, 1fr); padding-top: 44px; }
+}

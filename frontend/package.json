@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node -e \"require('fs').rmSync('../store_customizations/public/chunks',{recursive:true,force:true})\"",
+    "prebuild": "node -e \"const fs=require('fs'),path=require('path'),pub='../store_customizations/public';fs.rmSync(path.join(pub,'chunks'),{recursive:true,force:true});fs.readdirSync(pub).filter(f=>/^index\\.[^.]+\\.js(\\.map)?$/.test(f)).forEach(f=>fs.rmSync(path.join(pub,f),{force:true}));\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

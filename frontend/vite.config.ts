@@ -18,8 +18,7 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: false,
     rollupOptions: {
       output: {
-        // Fixed filenames so www/index.html can reference them without hashes
-        entryFileNames: 'index.js',
+        entryFileNames: 'index.[hash].js',
         chunkFileNames: 'chunks/[name]-[hash].js',
         assetFileNames: (info) =>
           info.name?.endsWith('.css') ? 'index.css' : 'assets/[name][extname]',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { api } from '../services/client';
 import { useCart } from '../context/CartContext';
@@ -9,6 +9,7 @@ interface VariantItem {
     item_code: string;
     price: number;
     image?: string;
+    images?: string[];
     [attr: string]: any;
 }
 
@@ -26,6 +27,7 @@ interface Props {
     id: string;
     name: string;
     image: string;
+    images?: string[];
     price: string;
     onClose: () => void;
 }
@@ -46,7 +48,7 @@ function isColourAttr(attrName: string): boolean {
     return /colou?r/i.test(attrName);
 }
 
-const QuickOptionsModal: React.FC<Props> = ({ id, name, image, price, onClose }) => {
+const QuickOptionsModal: React.FC<Props> = ({ id, name, image, images, price, onClose }) => {
     const { addToCart } = useCart();
     const { showToast } = useToast();
 
@@ -55,6 +57,8 @@ const QuickOptionsModal: React.FC<Props> = ({ id, name, image, price, onClose })
     // Generic: maps attribute name → selected value (empty string = not yet selected)
     const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
     const [quantity, setQuantity] = useState(1);
+    const [heroIdx, setHeroIdx] = useState(0);
+    const [isHoveringHero, setIsHoveringHero] = useState(false);
     const overlayRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -142,7 +146,26 @@ const QuickOptionsModal: React.FC<Props> = ({ id, name, image, price, onClose })
         ) ?? null;
     })();
 
-    const displayImage = previewVariant?.image || image;
+    const qomGalleryImages = useMemo(() => {
+        if (previewVariant?.images?.length) return previewVariant.images;
+        if (images?.length) return images;
+        const fallback = previewVariant?.image || image;
+        return [fallback];
+    }, [previewVariant, images, image]);
+
+    useEffect(() => {
+        setHeroIdx(0);
+    }, [qomGalleryImages]);
+
+    useEffect(() => {
+        if (qomGalleryImages.length <= 1 || isHoveringHero) return;
+        const timer = setInterval(() => {
+            setHeroIdx(i => (i + 1) % qomGalleryImages.length);
+        }, 3000);
+        return () => clearInterval(timer);
+    }, [qomGalleryImages, isHoveringHero]);
+
+    const displayImage = qomGalleryImages[heroIdx] ?? (previewVariant?.image || image);
     const displayPrice = activeVariant
         ? `₹${Number(activeVariant.price).toLocaleString('en-IN')}`
         : price;
@@ -173,9 +196,36 @@ const QuickOptionsModal: React.FC<Props> = ({ id, name, image, price, onClose })
         >
             <div className="qom-sheet">
                 {/* Hero image */}
-                <div className="qom-hero">
+                <div
+                    className="qom-hero"
+                    onMouseEnter={() => setIsHoveringHero(true)}
+                    onMouseLeave={() => setIsHoveringHero(false)}
+                >
                     <div className="qom-handle" />
-                    <img className="qom-hero-img" src={displayImage} alt={name} />
+                    <img key={heroIdx} className="qom-hero-img" src={displayImage} alt={name} />
+                    {qomGalleryImages.length > 1 && (
+                        <>
+                            <button
+                                className="qom-hero-arrow qom-hero-prev"
+                                onClick={() => setHeroIdx(i => (i - 1 + qomGalleryImages.length) % qomGalleryImages.length)}
+                                aria-label="Previous"
+                            >‹</button>
+                            <button
+                                className="qom-hero-arrow qom-hero-next"
+                                onClick={() => setHeroIdx(i => (i + 1) % qomGalleryImages.length)}
+                                aria-label="Next"
+                            >›</button>
+                            <div className="qom-hero-dots">
+                                {qomGalleryImages.map((_, idx) => (
+                                    <span
+                                        key={idx}
+                                        className={`qom-hero-dot${heroIdx === idx ? ' active' : ''}`}
+                                        onClick={() => setHeroIdx(idx)}
+                                    />
+                                ))}
+                            </div>
+                        </>
+                    )}
                     <div className="qom-hero-gradient" />
                     <div className="qom-hero-info">
                         <p className="qom-hero-name">{name}</p>

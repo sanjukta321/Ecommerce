@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
@@ -11,20 +11,35 @@ interface ProductCardProps {
     name: string;
     price: string;
     image: string;
+    images?: string[];
     rating?: number;
     category?: string;
     has_variants?: boolean;
     variant_count?: number;
 }
 
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=600';
 
-const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, rating = 4.5, category, has_variants, variant_count }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, images, rating = 4.5, category, has_variants, variant_count }) => {
     const navigate = useNavigate();
     const { addToCart } = useCart();
     const { toggleWishlist, isWishlisted } = useWishlist();
     const { showToast } = useToast();
     const [showModal, setShowModal] = useState(false);
+    const [cardImageIdx, setCardImageIdx] = useState(0);
+    const [isHoveringImage, setIsHoveringImage] = useState(false);
+
+    const cardImages = images && images.length > 1 ? images : null;
+
+    useEffect(() => {
+        if (!cardImages) return;
+        if (isHoveringImage) return;
+        const timer = setInterval(() => {
+            setCardImageIdx(i => (i + 1) % cardImages.length);
+        }, 3000);
+        return () => clearInterval(timer);
+    }, [cardImages, isHoveringImage]);
+
+    const currentCardImage = cardImages ? (cardImages[cardImageIdx] ?? image) : image;
 
     const buildItem = () => ({
         id, name,
@@ -56,13 +71,45 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, ratin
     return (
         <>
             <div className="product-card glass-effect" style={{ display: 'flex', flexDirection: 'column' }}>
-                <Link to={`/product/${id}`} style={{ textDecoration: 'none', color: 'inherit', flex: 1 }}>
-                    <div className="product-image">
+                <div
+                    style={{ textDecoration: 'none', color: 'inherit', flex: 1, cursor: 'pointer' }}
+                    onClick={() => navigate(`/product/${id}`)}
+                >
+                    <div
+                        className="product-image"
+                        onMouseEnter={() => setIsHoveringImage(true)}
+                        onMouseLeave={() => setIsHoveringImage(false)}
+                    >
                         <img
-                            src={image}
+                            key={cardImageIdx}
+                            src={currentCardImage}
                             alt={name}
-                            onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMAGE; }}
+                            className="card-slide-img"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                         />
+                        {cardImages && (
+                            <>
+                                <button
+                                    className="card-slide-arrow card-slide-prev"
+                                    onClick={e => { e.stopPropagation(); setCardImageIdx(i => (i - 1 + cardImages.length) % cardImages.length); }}
+                                    aria-label="Previous image"
+                                >‹</button>
+                                <button
+                                    className="card-slide-arrow card-slide-next"
+                                    onClick={e => { e.stopPropagation(); setCardImageIdx(i => (i + 1) % cardImages.length); }}
+                                    aria-label="Next image"
+                                >›</button>
+                                <div className="card-slide-dots">
+                                    {cardImages.map((_, idx) => (
+                                        <span
+                                            key={idx}
+                                            className={`card-slide-dot${cardImageIdx === idx ? ' active' : ''}`}
+                                            onClick={e => { e.stopPropagation(); setCardImageIdx(idx); }}
+                                        />
+                                    ))}
+                                </div>
+                            </>
+                        )}
                         <button
                             className={`wishlist-toggle ${isWishlisted(id) ? 'active' : ''}`}
                             onClick={handleWishlist}
@@ -87,7 +134,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, ratin
                         </div>
                         <p className="price">{price}</p>
                     </div>
-                </Link>
+                </div>
                 <div className="card-footer-actions">
                     <button className="card-action-btn card-add-to-cart-btn" onClick={handleAddToCart}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
@@ -104,7 +151,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, ratin
                 <QuickOptionsModal
                     id={id}
                     name={name}
-                    image={image}
+                    image={currentCardImage}
+                    images={cardImages ?? undefined}
                     price={price}
                     onClose={() => setShowModal(false)}
                 />

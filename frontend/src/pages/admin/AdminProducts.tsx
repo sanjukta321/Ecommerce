@@ -17,7 +17,7 @@ interface VariantRow {
   attrs: Record<string, string>;
   price: string;
   stock: string;
-  image: string;
+  images: string[];
   enabled: boolean;
 }
 
@@ -189,8 +189,10 @@ export default function AdminProducts() {
     setSimpleError(''); setMode('simple');
   };
 
-  const openSimpleEdit = (item: Item) => {
+  const openSimpleEdit = async (item: Item) => {
     setSimpleEdit(item);
+    setSimpleError(''); setMode('simple');
+    // Base form with single image; will be overwritten by slideshow fetch below
     setSimpleForm({
       item_name: item.item_name || '',
       item_group: item.item_group || itemGroups[0]?.name || '',
@@ -200,7 +202,16 @@ export default function AdminProducts() {
       published: !item.disabled,
       stock_qty: String(item.actual_qty ?? 0),
     });
-    setSimpleError(''); setMode('simple');
+    // Fetch full gallery images (slideshow) via public product API
+    try {
+      const d = await api<{ message: { images?: string[] } }>(
+        `/api/method/store_customizations.api.products.get_product?item_code=${encodeURIComponent(item.name)}`
+      );
+      const imgs = d.message?.images;
+      if (imgs && imgs.length > 0) {
+        setSimpleForm(f => ({ ...f, images: imgs }));
+      }
+    } catch {}
   };
 
   const saveSimple = async () => {
@@ -216,7 +227,7 @@ export default function AdminProducts() {
         price:       parseFloat(simpleForm.standard_rate),
         stock_qty:   stock,
         description: simpleForm.description,
-        image:       simpleForm.images.filter(Boolean)[0] || '',
+        images:      JSON.stringify(simpleForm.images.filter(Boolean)),
         published:   simpleForm.published ? 1 : 0,
         item_code:   simpleEdit ? simpleEdit.name : null,
       });
@@ -238,7 +249,7 @@ export default function AdminProducts() {
         item_code: string; item_name: string; item_group: string; description: string; published: boolean;
         attributes: { attribute: string }[];
         attr_values: Record<string, string[]>;
-        variants: { item_code: string; attrs: Record<string,string>; price: number; stock: number; image: string; enabled: boolean }[];
+        variants: { item_code: string; attrs: Record<string,string>; price: number; stock: number; image: string; images?: string[]; enabled: boolean }[];
         images: string[];
       } }>(`/api/method/store_customizations.api.admin.get_template_product?item_code=${encodeURIComponent(item.name)}`);
       const t = d.message;
@@ -256,7 +267,7 @@ export default function AdminProducts() {
           attrs:   v.attrs,
           price:   String(v.price),
           stock:   String(v.stock),
-          image:   v.image,
+          images:  v.images?.length ? v.images : (v.image ? [v.image] : ['']),
           enabled: v.enabled,
         })),
         images:    t.images?.length ? t.images : [''],
@@ -276,7 +287,7 @@ export default function AdminProducts() {
       attrs.filter(a => a.values.length > 0).forEach((a, i) => { attrsMap[a.attribute] = combo[i]; });
       const key = combo.join('|');
       const prev = existing.find(e => Object.values(e.attrs).join('|') === key);
-      return prev || { attrs: attrsMap, price: '', stock: '0', image: '', enabled: true };
+      return prev || { attrs: attrsMap, price: '', stock: '0', images: [''], enabled: true };
     });
   };
 
@@ -331,10 +342,37 @@ export default function AdminProducts() {
     finally { setAddingAttr(false); }
   };
 
-  const updateVariant = (idx: number, key: keyof VariantRow, value: string | boolean) => {
+  const updateVariant = (idx: number, key: keyof VariantRow, value: string | boolean | string[]) => {
     setWizard(w => {
       const rows = [...w.variants];
       rows[idx] = { ...rows[idx], [key]: value };
+      return { ...w, variants: rows };
+    });
+  };
+
+  const updateVariantImage = (varIdx: number, imgIdx: number, value: string) => {
+    setWizard(w => {
+      const rows = [...w.variants];
+      const imgs = [...rows[varIdx].images];
+      imgs[imgIdx] = value;
+      rows[varIdx] = { ...rows[varIdx], images: imgs };
+      return { ...w, variants: rows };
+    });
+  };
+
+  const addVariantImage = (varIdx: number) => {
+    setWizard(w => {
+      const rows = [...w.variants];
+      rows[varIdx] = { ...rows[varIdx], images: [...rows[varIdx].images, ''] };
+      return { ...w, variants: rows };
+    });
+  };
+
+  const removeVariantImage = (varIdx: number, imgIdx: number) => {
+    setWizard(w => {
+      const rows = [...w.variants];
+      const imgs = rows[varIdx].images.filter((_, i) => i !== imgIdx);
+      rows[varIdx] = { ...rows[varIdx], images: imgs.length ? imgs : [''] };
       return { ...w, variants: rows };
     });
   };
@@ -363,7 +401,7 @@ export default function AdminProducts() {
           attrs: v.attrs,
           price: parseFloat(v.price) || 0,
           stock: parseFloat(v.stock) || 0,
-          image: v.image,
+          images: v.images.filter(Boolean),
           enabled: v.enabled,
         }))),
         images:    JSON.stringify(imgs),
@@ -576,8 +614,8 @@ export default function AdminProducts() {
                       templateVariants[item.name].map((v, vi) => (
                         <tr key={`${item.name}-v${vi}`} style={{ background: '#f1f5ff' }}>
                           <td>
-                            {v.image
-                              ? <img src={imgSrc(v.image)} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: 'cover' }} />
+                            {v.images?.[0]
+                              ? <img src={imgSrc(v.images[0])} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: 'cover' }} />
                               : <div style={{ width: 32, height: 32, borderRadius: 4, background: '#dde4f0', marginLeft: 4 }} />}
                           </td>
                           <td style={{ paddingLeft: 24, fontSize: 13 }}>
@@ -782,7 +820,7 @@ export default function AdminProducts() {
                             {wizard.selectedAttrs.map(a => <th key={a.attribute} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e2e8f0' }}>{a.attribute}</th>)}
                             <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e2e8f0' }}>Price (₹) *</th>
                             <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e2e8f0' }}>Stock</th>
-                            <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e2e8f0' }}>Image URL</th>
+                            <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e2e8f0' }}>Images</th>
                             <th style={{ padding: '6px 10px', textAlign: 'center', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e2e8f0' }}>On</th>
                           </tr>
                         </thead>
@@ -804,10 +842,21 @@ export default function AdminProducts() {
                                   onChange={e => updateVariant(idx, 'stock', e.target.value)}
                                   style={{ width: 70, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }} />
                               </td>
-                              <td style={{ padding: '5px 8px' }}>
-                                <input type="text" placeholder="https://…" value={v.image}
-                                  onChange={e => updateVariant(idx, 'image', e.target.value)}
-                                  style={{ width: 130, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12 }} />
+                              <td style={{ padding: '5px 8px', minWidth: 160 }}>
+                                {v.images.map((imgUrl, imgIdx) => (
+                                  <div key={imgIdx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                                    <input type="text" placeholder={imgIdx === 0 ? 'https://… (primary)' : `Image ${imgIdx + 1}`}
+                                      value={imgUrl}
+                                      onChange={e => updateVariantImage(idx, imgIdx, e.target.value)}
+                                      style={{ width: 140, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 11 }} />
+                                    {v.images.length > 1 && (
+                                      <button type="button" onClick={() => removeVariantImage(idx, imgIdx)}
+                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
+                                    )}
+                                  </div>
+                                ))}
+                                <button type="button" onClick={() => addVariantImage(idx)}
+                                  style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add image</button>
                               </td>
                               <td style={{ padding: '5px 8px', textAlign: 'center' }}>
                                 <input type="checkbox" checked={v.enabled} onChange={e => updateVariant(idx, 'enabled', e.target.checked)} />

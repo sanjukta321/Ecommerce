@@ -52,8 +52,68 @@
     transition: transform 0.4s ease;
 }
 
-.qom-hero:hover .qom-hero-img {
-    transform: scale(1.04);
+@keyframes qomImgFade {
+    from { opacity: 0.45; transform: scale(1.03); }
+    to   { opacity: 1;    transform: scale(1); }
+}
+
+.qom-hero-img {
+    animation: qomImgFade 0.35s ease;
+}
+
+/* Hero slide arrows */
+.qom-hero-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,0.42);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 3;
+    backdrop-filter: blur(4px);
+    transition: background 0.2s;
+    padding: 0;
+}
+
+.qom-hero-prev { left: 10px; }
+.qom-hero-next { right: 10px; }
+
+.qom-hero-arrow:hover {
+    background: rgba(0,0,0,0.7);
+}
+
+/* Hero dot indicators */
+.qom-hero-dots {
+    position: absolute;
+    bottom: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    z-index: 3;
+}
+
+.qom-hero-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.qom-hero-dot.active {
+    background: #fff;
+    transform: scale(1.4);
 }
 
 /* gradient fade from image → sheet background */

@@ -31,8 +31,77 @@
     display: block;
 }
 
-.product-card:hover .product-image img {
+@keyframes cardImgFade {
+    from { opacity: 0.5; transform: scale(1.03); }
+    to   { opacity: 1;   transform: scale(1); }
+}
+
+.product-card .product-image .card-slide-img {
+    animation: cardImgFade 0.4s ease;
+}
+
+.product-card:hover .product-image .card-slide-img {
     transform: scale(1.1);
+}
+
+/* Slide arrows */
+.card-slide-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    padding: 0;
+    backdrop-filter: blur(4px);
+}
+
+.product-card .product-image:hover .card-slide-arrow {
+    opacity: 1;
+}
+
+.card-slide-arrow:hover {
+    background: rgba(0,0,0,0.72) !important;
+}
+
+.card-slide-prev { left: 8px; }
+.card-slide-next { right: 8px; }
+
+/* Dot indicators */
+.card-slide-dots {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    z-index: 5;
+}
+
+.card-slide-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.55);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.card-slide-dot.active {
+    background: #fff;
+    transform: scale(1.35);
 }
 
 .card-footer-actions {
@@ -114,6 +183,11 @@
     align-items: center;
     opacity: 0;
     transition: var(--transition);
+    pointer-events: none;
+}
+
+.product-overlay .quick-add-btn {
+    pointer-events: auto;
 }
 
 .product-card:hover .product-overlay {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { allProducts } from '../data/allProducts';
 import { useCart } from '../context/CartContext';
@@ -16,6 +16,7 @@ interface FrappeItem {
     standard_rate: number;
     selling_price: number;
     image?: string;
+    images?: string[];
     description?: string;
     has_variants?: number;
     actual_qty?: number;
@@ -25,6 +26,7 @@ interface VariantItem {
     item_code: string;
     price: number;
     image?: string;
+    images?: string[];
     [attr: string]: any;
 }
 
@@ -72,13 +74,17 @@ function buildDisplayFromFrappe(item: FrappeItem): DisplayProduct {
         ? (item.image.startsWith('http') ? item.image : BASE + item.image)
         : PLACEHOLDER;
 
+    const galleryImgs = item.images?.length
+        ? item.images
+        : [img];
+
     return {
         id: item.name,
         name: item.item_name || item.name,
         price,
         originalPrice,
         image: img,
-        images: [img],
+        images: galleryImgs,
         category: item.item_group || 'General',
         rating: 4.5,
         reviews: 256,
@@ -146,6 +152,8 @@ const ProductDetail: React.FC = () => {
     const [activeImage, setActiveImage] = useState(0);
     const [showSizeChart, setShowSizeChart] = useState(false);
     const [addedToCart, setAddedToCart] = useState(false);
+    const [showLightbox, setShowLightbox] = useState(false);
+    const [isHoveringGallery, setIsHoveringGallery] = useState(false);
 
     const [product, setProduct] = useState<DisplayProduct | null>(null);
     const [loading, setLoading] = useState(true);
@@ -295,6 +303,28 @@ const ProductDetail: React.FC = () => {
         return product?.image ?? PLACEHOLDER;
     })();
 
+    const galleryImages = useMemo(() => {
+        if (activeVariant?.images?.length) return activeVariant.images;
+        if (selectedColour && variantData) {
+            const imgs = variantData.variants
+                .filter(v => v[colourAttrName] === selectedColour)
+                .flatMap(v => v.images?.length ? v.images : (v.image ? [v.image] : []));
+            const unique = [...new Set(imgs)];
+            if (unique.length) return unique;
+        }
+        return product?.images ?? [];
+    }, [activeVariant, selectedColour, variantData, product, colourAttrName]);
+
+    useEffect(() => { setActiveImage(0); }, [galleryImages]);
+
+    useEffect(() => {
+        if (galleryImages.length <= 1 || isHoveringGallery) return;
+        const timer = setInterval(() => {
+            setActiveImage(i => (i + 1) % galleryImages.length);
+        }, 3500);
+        return () => clearInterval(timer);
+    }, [galleryImages, isHoveringGallery]);
+
     const displayPrice = activeVariant
         ? `₹${Number(activeVariant.price).toLocaleString('en-IN')}`
         : product?.price ?? '';
@@ -337,13 +367,36 @@ const ProductDetail: React.FC = () => {
             <div className="detail-container container">
                 <div className="product-detail-grid fade-in">
                     {/* Image Gallery */}
-                    <div className="image-gallery">
-                        <div className="main-image">
-                            <img src={displayImage} alt={product.name} />
+                    <div className="image-gallery"
+                        onMouseEnter={() => setIsHoveringGallery(true)}
+                        onMouseLeave={() => setIsHoveringGallery(false)}>
+                        <div className="main-image" onClick={() => setShowLightbox(true)}>
+                            <img key={activeImage} src={galleryImages[activeImage] ?? displayImage} alt={product.name} />
+                            {galleryImages.length > 1 && (
+                                <>
+                                    <button className="gallery-arrow gallery-prev"
+                                        onClick={e => { e.stopPropagation(); setActiveImage(i => (i - 1 + galleryImages.length) % galleryImages.length); }}>
+                                        ‹
+                                    </button>
+                                    <button className="gallery-arrow gallery-next"
+                                        onClick={e => { e.stopPropagation(); setActiveImage(i => (i + 1) % galleryImages.length); }}>
+                                        ›
+                                    </button>
+                                </>
+                            )}
                         </div>
-                        {product.images.length > 1 && (
+                        {galleryImages.length > 1 && (
+                            <div className="slide-dots">
+                                {galleryImages.map((_, idx) => (
+                                    <button key={idx}
+                                        className={`slide-dot${activeImage === idx ? ' active' : ''}`}
+                                        onClick={() => setActiveImage(idx)} />
+                                ))}
+                            </div>
+                        )}
+                        {galleryImages.length > 1 && (
                             <div className="thumbnail-strip">
-                                {product.images.map((img, idx) => (
+                                {galleryImages.map((img, idx) => (
                                     <img
                                         key={idx}
                                         src={img}
@@ -355,6 +408,21 @@ const ProductDetail: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    {/* Lightbox */}
+                    {showLightbox && (
+                        <div className="lightbox-overlay" onClick={() => setShowLightbox(false)}>
+                            <div className="lightbox-grid" onClick={e => e.stopPropagation()}>
+                                <button className="lightbox-close" onClick={() => setShowLightbox(false)}>✕</button>
+                                {galleryImages.map((img, idx) => (
+                                    <div key={idx} className={`lightbox-card${activeImage === idx ? ' active' : ''}`}
+                                        onClick={() => { setActiveImage(idx); setShowLightbox(false); }}>
+                                        <img src={img} alt={`View ${idx + 1}`} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Product Info */}
                     <div className="product-details">

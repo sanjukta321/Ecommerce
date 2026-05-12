@@ -206,7 +206,7 @@ def update_item_stock(item_code, qty, warehouse=None):
 @frappe.whitelist()
 def save_admin_product(
     item_name, item_group, price,
-    stock_qty=0, description="", image="", published=1,
+    stock_qty=0, description="", image="", images=None, published=1,
     item_code=None,
 ):
     """
@@ -218,6 +218,14 @@ def save_admin_product(
     """
     if "System Manager" not in frappe.get_roles():
         frappe.throw("Not permitted", frappe.PermissionError)
+
+    import json
+    if isinstance(images, str):
+        images = json.loads(images)
+    # Support both legacy "image" single string and new "images" array
+    images = [i for i in (images or []) if i]
+    if not images and image:
+        images = [image]
 
     price     = float(price)
     stock_qty = float(stock_qty)
@@ -244,7 +252,7 @@ def save_admin_product(
     item.item_group   = item_group
     item.standard_rate = price
     item.description  = description or ""
-    item.image        = image or ""
+    item.image        = images[0] if images else ""
     item.disabled     = 0 if published else 1
     item.is_stock_item = 1
     if not item.stock_uom:
@@ -256,6 +264,42 @@ def save_admin_product(
         item.insert(ignore_permissions=True)
 
     item_code = item.name
+
+    # Website Item + Slideshow for multi-image support
+    wi_name = frappe.db.get_value("Website Item", {"item_code": item_code}, "name")
+    if wi_name:
+        wi = frappe.get_doc("Website Item", wi_name)
+    else:
+        wi = frappe.new_doc("Website Item")
+        wi.item_code = item_code
+    wi.web_item_name = item_name.strip()
+    wi.item_group    = item_group
+    wi.short_description = description or ""
+    wi.published     = 1 if published else 0
+    if images:
+        wi.website_image = images[0]
+    if len(images) > 1:
+        ss_name = wi.slideshow or f"SS-{item_code}"
+        if frappe.db.exists("Website Slideshow", ss_name):
+            ss = frappe.get_doc("Website Slideshow", ss_name)
+            ss.set("slideshow_items", [])
+        else:
+            ss = frappe.new_doc("Website Slideshow")
+            ss.slideshow_name = ss_name
+        for img_url in images:
+            ss.append("slideshow_items", {"image": img_url, "heading": item_name.strip()})
+        if ss.is_new():
+            ss.insert(ignore_permissions=True)
+        else:
+            ss.save(ignore_permissions=True)
+        wi.slideshow = ss.name
+    elif frappe.db.exists("Website Slideshow", f"SS-{item_code}"):
+        frappe.delete_doc("Website Slideshow", f"SS-{item_code}", ignore_permissions=True)
+        wi.slideshow = ""
+    if wi.is_new():
+        wi.insert(ignore_permissions=True)
+    else:
+        wi.save(ignore_permissions=True)
 
     # ── 2. Item Price ─────────────────────────────────────────────────────────
     price_list = (
@@ -401,8 +445,9 @@ def save_template_product(
         attrs_dict = v.get("attrs", {})
         v_price    = float(v.get("price", 0) or 0)
         v_stock    = float(v.get("stock", 0) or 0)
-        v_image    = v.get("image", "") or ""
         v_enabled  = bool(v.get("enabled", True))
+        # Support both legacy "image" (single URL) and new "images" (array)
+        v_images   = v.get("images") or ([v.get("image")] if v.get("image") else [])
 
         # Build variant item_code: Template-ABBR1-ABBR2
         abbr_parts = []
@@ -447,8 +492,7 @@ def save_template_product(
         variant.is_stock_item = 1
         if not variant.stock_uom:
             variant.stock_uom = "Nos"
-        if v_image:
-            variant.image = v_image
+        variant.image = v_images[0] if v_images else ""
 
         # Set variant attribute values
         variant.set("attributes", [])
@@ -463,6 +507,24 @@ def save_template_product(
             variant.insert(ignore_permissions=True)
         else:
             variant.save(ignore_permissions=True)
+
+        # Variant image slideshow (for multi-image support)
+        v_ss_name = f"SS-{variant_code}"
+        if len(v_images) > 1:
+            if frappe.db.exists("Website Slideshow", v_ss_name):
+                v_ss = frappe.get_doc("Website Slideshow", v_ss_name)
+                v_ss.set("slideshow_items", [])
+            else:
+                v_ss = frappe.new_doc("Website Slideshow")
+                v_ss.slideshow_name = v_ss_name
+            for img_url in v_images:
+                v_ss.append("slideshow_items", {"image": img_url, "heading": item_name.strip()})
+            if v_ss.is_new():
+                v_ss.insert(ignore_permissions=True)
+            else:
+                v_ss.save(ignore_permissions=True)
+        elif frappe.db.exists("Website Slideshow", v_ss_name):
+            frappe.delete_doc("Website Slideshow", v_ss_name, ignore_permissions=True)
 
         # Item Price
         existing_ip = frappe.db.get_value(
@@ -546,10 +608,58 @@ def get_template_product(item_code):
             "price":     float(price),
             "stock":     float(stock),
             "image":     vi["image"] or "",
+            "images":    [],   # filled below after bulk queries
             "enabled":   not vi["disabled"],
         })
 
-    # Images from slideshow
+    # Bulk fetch variant images: SS-{variant_code} slideshows + File attachments
+    IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg')
+    all_variant_codes = [vi["name"] for vi in variant_items]
+
+    v_ss_candidates = [f"SS-{vc}" for vc in all_variant_codes]
+    existing_v_ss = set()
+    if v_ss_candidates:
+        existing_v_ss = set(frappe.get_all(
+            "Website Slideshow", filters={"name": ["in", v_ss_candidates]}, pluck="name"
+        ))
+    v_ss_img_map = {}
+    if existing_v_ss:
+        vs_rows = frappe.get_all(
+            "Website Slideshow Item",
+            filters={"parent": ["in", list(existing_v_ss)]},
+            fields=["parent", "image"],
+            order_by="idx asc",
+        )
+        for s in vs_rows:
+            if s["image"]:
+                vc = s["parent"][3:] if s["parent"].startswith("SS-") else s["parent"]
+                v_ss_img_map.setdefault(vc, []).append(s["image"])
+
+    v_file_rows = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Item", "attached_to_name": ["in", all_variant_codes], "is_folder": 0},
+        fields=["attached_to_name", "file_url"],
+        order_by="creation asc",
+    ) if all_variant_codes else []
+    v_file_img_map = {}
+    for f in v_file_rows:
+        url = f["file_url"] or ""
+        if url.split("?")[0].lower().endswith(IMAGE_EXTS):
+            v_file_img_map.setdefault(f["attached_to_name"], []).append(url)
+
+    for v in variants:
+        vc = v["item_code"]
+        raw = v_ss_img_map.get(vc, [])[:]
+        for url in v_file_img_map.get(vc, []):
+            if url not in raw:
+                raw.append(url)
+        if not raw and v["image"]:
+            raw = [v["image"]]
+        v["images"] = raw
+        if raw:
+            v["image"] = raw[0]
+
+    # Template images: Website Slideshow + File attachments, merged
     wi = frappe.db.get_value("Website Item", {"item_code": item_code}, ["name", "slideshow"], as_dict=True)
     images = []
     if wi and wi.get("slideshow"):
@@ -560,6 +670,18 @@ def get_template_product(item_code):
             order_by="idx asc",
         )
         images = [s["image"] for s in ss_items if s["image"]]
+
+    tpl_file_rows = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Item", "attached_to_name": item_code, "is_folder": 0},
+        fields=["file_url"],
+        order_by="creation asc",
+    )
+    for f in tpl_file_rows:
+        url = f["file_url"] or ""
+        if url.split("?")[0].lower().endswith(IMAGE_EXTS) and url not in images:
+            images.append(url)
+
     if not images and template.image:
         images = [template.image]
 

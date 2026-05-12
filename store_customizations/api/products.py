@@ -119,6 +119,119 @@ def get_all_products(item_group=None, limit=100):
                 if not item.get("image") and item["name"] in tpl_image:
                     item["image"] = tpl_image[item["name"]]
 
+        # Collect fallback images (single image per variant) for template items
+        tpl_all_images = {}
+        for v in variant_rows:
+            tcode = v["variant_of"]
+            img = v.get("image")
+            if img:
+                if tcode not in tpl_all_images:
+                    tpl_all_images[tcode] = []
+                if img not in tpl_all_images[tcode]:
+                    tpl_all_images[tcode].append(img)
+
+    else:
+        tpl_all_images = {}
+        variant_rows = []
+
+    IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg')
+
+    # --- Source 1: Website Slideshow (admin dashboard) ---
+    # Template items and simple items both link via Website Item.slideshow
+    all_item_codes = [i["name"] for i in items]
+    wi_rows = frappe.get_all(
+        "Website Item",
+        filters={"item_code": ["in", all_item_codes]},
+        fields=["item_code", "slideshow"],
+    )
+    wi_ss_map = {w["item_code"]: w["slideshow"] for w in wi_rows if w.get("slideshow")}
+
+    ss_images_map = {}
+    if wi_ss_map:
+        ss_rows = frappe.get_all(
+            "Website Slideshow Item",
+            filters={"parent": ["in", list(wi_ss_map.values())]},
+            fields=["parent", "image"],
+            order_by="idx asc",
+        )
+        for s in ss_rows:
+            if s["image"]:
+                ss_images_map.setdefault(s["parent"], []).append(s["image"])
+
+    # Per-variant slideshows: SS-{variant_code} (admin saves these)
+    v_ss_candidate_names = [f"SS-{v['name']}" for v in variant_rows]
+    variant_ss_img_map = {}
+    if v_ss_candidate_names:
+        existing_ss = set(frappe.get_all(
+            "Website Slideshow",
+            filters={"name": ["in", v_ss_candidate_names]},
+            pluck="name",
+        ))
+        if existing_ss:
+            vs_rows = frappe.get_all(
+                "Website Slideshow Item",
+                filters={"parent": ["in", list(existing_ss)]},
+                fields=["parent", "image"],
+                order_by="idx asc",
+            )
+            for s in vs_rows:
+                if s["image"]:
+                    vc = s["parent"][3:] if s["parent"].startswith("SS-") else s["parent"]
+                    variant_ss_img_map.setdefault(vc, []).append(s["image"])
+
+    # --- Source 2: File attachments (Frappe Attachments widget) ---
+    all_lookup_codes = all_item_codes + [v["name"] for v in variant_rows]
+    file_rows = frappe.get_all(
+        "File",
+        filters={
+            "attached_to_doctype": "Item",
+            "attached_to_name": ["in", all_lookup_codes],
+            "is_folder": 0,
+        },
+        fields=["attached_to_name", "file_url"],
+        order_by="creation asc",
+    ) if all_lookup_codes else []
+
+    file_img_map = {}
+    for f in file_rows:
+        url = f["file_url"] or ""
+        if url.split("?")[0].lower().endswith(IMAGE_EXTS):
+            file_img_map.setdefault(f["attached_to_name"], []).append(url)
+
+    # Merge variant images for template display (variant SS + variant File attachments)
+    tpl_merged_images = {}
+    for v in variant_rows:
+        tcode = v["variant_of"]
+        for url in variant_ss_img_map.get(v["name"], []) + file_img_map.get(v["name"], []):
+            lst = tpl_merged_images.setdefault(tcode, [])
+            if url not in lst:
+                lst.append(url)
+
+    base_url = frappe.utils.get_url()
+
+    def _resolve_img(img):
+        return img if img.startswith("http") else base_url + img
+
+    for item in items:
+        if item.get("has_variants"):
+            # Template: own slideshow > merged variant images > fallback variant.image
+            ss_name = wi_ss_map.get(item["name"])
+            raw = (ss_images_map.get(ss_name, []) if ss_name else []) \
+                or tpl_merged_images.get(item["name"], []) \
+                or tpl_all_images.get(item["name"], [])
+        else:
+            # Simple: slideshow > file attachments
+            ss_name = wi_ss_map.get(item["name"])
+            ss_imgs = ss_images_map.get(ss_name, []) if ss_name else []
+            file_imgs = file_img_map.get(item["name"], [])
+            raw = ss_imgs[:]
+            for url in file_imgs:
+                if url not in raw:
+                    raw.append(url)
+        if not raw and item.get("image"):
+            raw = [item["image"]]
+        item["images"] = [_resolve_img(i) for i in raw if i]
+
     return items
 
 
@@ -150,6 +263,48 @@ def get_product(item_code):
     )
     item["selling_price"] = float(selling_price or item.get("standard_rate") or 0)
     item["has_variants"]  = frappe.db.get_value("Item", item_code, "has_variants") or 0
+
+    # Fetch gallery images: Website Slideshow (admin) + File attachments, merged
+    base_url = frappe.utils.get_url()
+    IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg')
+
+    wi_info = frappe.db.get_value("Website Item", {"item_code": item_code}, ["name", "slideshow"], as_dict=True)
+    slideshow_imgs = []
+    if wi_info and wi_info.get("slideshow"):
+        ss_items = frappe.get_all(
+            "Website Slideshow Item",
+            filters={"parent": wi_info["slideshow"]},
+            fields=["image"],
+            order_by="idx asc",
+        )
+        slideshow_imgs = [s["image"] for s in ss_items if s["image"]]
+
+    file_rows = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Item", "attached_to_name": item_code, "is_folder": 0},
+        fields=["file_url"],
+        order_by="creation asc",
+    )
+    file_imgs = [
+        f["file_url"] for f in file_rows
+        if f["file_url"] and f["file_url"].split("?")[0].lower().endswith(IMAGE_EXTS)
+    ]
+
+    raw_imgs = slideshow_imgs[:]
+    for url in file_imgs:
+        if url not in raw_imgs:
+            raw_imgs.append(url)
+
+    if raw_imgs:
+        item["images"] = [
+            (i if i.startswith("http") or i.startswith("data:") else base_url + i)
+            for i in raw_imgs
+        ]
+    elif item.get("image"):
+        img = item["image"]
+        item["images"] = [img if img.startswith("http") or img.startswith("data:") else base_url + img]
+    else:
+        item["images"] = []
 
     # For template items, build price range from variant Item Prices
     if item["has_variants"]:
@@ -224,13 +379,56 @@ def get_item_variants(item_code):
             price_map[ip["item_code"]] = ip["price_list_rate"]
 
     base_url = frappe.utils.get_url()
+    IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg')
+
+    # Source 1: SS-{variant_code} slideshows (admin dashboard)
+    v_ss_candidates = [f"SS-{vc}" for vc in variant_codes]
+    existing_ss = set()
+    if v_ss_candidates:
+        existing_ss = set(frappe.get_all(
+            "Website Slideshow", filters={"name": ["in", v_ss_candidates]}, pluck="name"
+        ))
+    ss_img_map = {}
+    if existing_ss:
+        ss_rows = frappe.get_all(
+            "Website Slideshow Item",
+            filters={"parent": ["in", list(existing_ss)]},
+            fields=["parent", "image"],
+            order_by="idx asc",
+        )
+        for s in ss_rows:
+            if s["image"]:
+                vc = s["parent"][3:] if s["parent"].startswith("SS-") else s["parent"]
+                ss_img_map.setdefault(vc, []).append(s["image"])
+
+    # Source 2: File attachments (Frappe Attachments widget)
+    file_rows = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Item", "attached_to_name": ["in", variant_codes], "is_folder": 0},
+        fields=["attached_to_name", "file_url"],
+        order_by="creation asc",
+    ) if variant_codes else []
+    file_img_map = {}
+    for f in file_rows:
+        url = f["file_url"] or ""
+        if url.split("?")[0].lower().endswith(IMAGE_EXTS):
+            file_img_map.setdefault(f["attached_to_name"], []).append(url)
+
     result = []
     for v in variants:
         img = v["image"] or ""
         if img and not img.startswith("http") and not img.startswith("data:"):
             img = base_url + img
         price = float(price_map.get(v["name"]) or v["standard_rate"] or 0)
-        entry: dict = {"item_code": v["name"], "price": price, "image": img}
+        raw = ss_img_map.get(v["name"], [])[:]
+        for url in file_img_map.get(v["name"], []):
+            if url not in raw:
+                raw.append(url)
+        images_list = [
+            (i if i.startswith("http") or i.startswith("data:") else base_url + i)
+            for i in raw
+        ] if raw else ([img] if img else [])
+        entry: dict = {"item_code": v["name"], "price": price, "image": img, "images": images_list}
         entry.update(attr_map.get(v["name"], {}))
         result.append(entry)
 
