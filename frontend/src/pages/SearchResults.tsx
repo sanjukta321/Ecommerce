@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { allProducts } from '../data/allProducts';
 import type { Product } from '../data/allProducts';
@@ -74,13 +74,20 @@ function scoreProduct(product: Product, terms: string[]): number {
     return total;
 }
 
+function parseMinPrice(price: string | number | undefined): number {
+    if (price == null) return 0;
+    if (typeof price === 'number') return price;
+    const clean = price.replace(/[₹,\s]/g, '').split('–')[0].split('—')[0];
+    return parseFloat(clean) || 0;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const SearchResults: React.FC = () => {
     const [searchParams] = useSearchParams();
     const rawQuery = searchParams.get('q') || '';
 
-    const { products: frappeProducts, loading } = useFrappeProducts();
+    const { products: frappeProducts, loading, loadMore, loadingMore, hasMore } = useFrappeProducts();
 
     // Merge Frappe + static, preferring Frappe when IDs overlap
     const frappeIds = new Set(frappeProducts.map(p => p.id));
@@ -91,12 +98,41 @@ const SearchResults: React.FC = () => {
 
     const expandedTerms = expandQuery(rawQuery);
 
-    const scored = merged
-        .map(p => ({ product: p, score: scoreProduct(p, expandedTerms) }))
-        .filter(x => x.score > 0)
-        .sort((a, b) => b.score - a.score);
+    const [sortBy, setSortBy] = useState<'relevance' | 'price_asc' | 'price_desc' | 'name'>('relevance');
+    const [selectedCategory, setSelectedCategory] = useState<string>('');
 
-    const filteredProducts = scored.map(x => x.product);
+    const categories = useMemo(() => {
+        const cats = new Set(merged.map(p => p.category).filter(Boolean));
+        return Array.from(cats).sort();
+    }, [merged.length]);
+
+    const scored = useMemo(() => merged
+        .map(p => ({ product: p, score: scoreProduct(p, expandedTerms) }))
+        .filter(x => x.score > 0), [merged.length, rawQuery]);
+
+    const filteredProducts = useMemo(() => {
+        let results = [...scored];
+
+        if (selectedCategory) {
+            results = results.filter(x => x.product.category === selectedCategory);
+        }
+
+        switch (sortBy) {
+            case 'price_asc':
+                results.sort((a, b) => parseMinPrice(a.product.price) - parseMinPrice(b.product.price));
+                break;
+            case 'price_desc':
+                results.sort((a, b) => parseMinPrice(b.product.price) - parseMinPrice(a.product.price));
+                break;
+            case 'name':
+                results.sort((a, b) => a.product.name.localeCompare(b.product.name));
+                break;
+            default:
+                results.sort((a, b) => b.score - a.score);
+        }
+
+        return results.map(x => x.product);
+    }, [scored, sortBy, selectedCategory]);
 
     return (
         <div className="product-listing-page search-results">
@@ -109,6 +145,42 @@ const SearchResults: React.FC = () => {
                         <p>Found {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}</p>
                     )}
                 </div>
+
+                {!loading && scored.length > 0 && (
+                    <div className="search-filter-bar fade-in">
+                        <div className="search-filter-group">
+                            <label>Category</label>
+                            <select
+                                value={selectedCategory}
+                                onChange={e => setSelectedCategory(e.target.value)}
+                                className="search-filter-select"
+                            >
+                                <option value="">All categories</option>
+                                {categories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="search-filter-group">
+                            <label>Sort by</label>
+                            <select
+                                value={sortBy}
+                                onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                                className="search-filter-select"
+                            >
+                                <option value="relevance">Relevance</option>
+                                <option value="price_asc">Price: Low to High</option>
+                                <option value="price_desc">Price: High to Low</option>
+                                <option value="name">Name A–Z</option>
+                            </select>
+                        </div>
+                        {selectedCategory && (
+                            <button className="search-filter-clear" onClick={() => setSelectedCategory('')}>
+                                Clear filters
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="products-grid fade-in">
@@ -133,6 +205,17 @@ const SearchResults: React.FC = () => {
                             <h2>No products found</h2>
                             <p>Try "saree", "t-shirt", "laptop", "watch" or a category like "Fashion"</p>
                         </div>
+                    </div>
+                )}
+                {hasMore && !loading && filteredProducts.length > 0 && (
+                    <div style={{ textAlign: 'center', margin: '24px 0' }}>
+                        <button
+                            className="load-more-btn"
+                            onClick={loadMore}
+                            disabled={loadingMore}
+                        >
+                            {loadingMore ? 'Loading…' : 'Load More'}
+                        </button>
                     </div>
                 )}
             </div>

@@ -236,6 +236,12 @@ def create_delivery_note(sales_order):
     dn.submit()
     frappe.db.commit()
 
+    try:
+        from store_customizations.api.email_notifications import send_order_shipped_email
+        send_order_shipped_email(sales_order)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "email: order shipped")
+
     return {"delivery_note": dn.name, "message": "Delivery Note created and submitted"}
 
 
@@ -264,6 +270,12 @@ def mark_order_delivered(sales_order):
 
     frappe.db.set_value("Delivery Note", dn_name, "status", "Closed")
     frappe.db.commit()
+
+    try:
+        from store_customizations.api.email_notifications import send_order_delivered_email
+        send_order_delivered_email(sales_order)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "email: order delivered")
 
     return {"delivery_note": dn_name, "message": "Order marked as delivered"}
 
@@ -382,6 +394,11 @@ def handle_return(invoice_name, action):
     if action == "approved":
         if inv.docstatus == 0:
             inv.submit()
+        try:
+            from store_customizations.api.email_notifications import send_return_approved_email
+            send_return_approved_email(invoice_name)
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), "email: return approved")
         return {"status": "approved", "name": invoice_name}
 
     if action == "rejected":

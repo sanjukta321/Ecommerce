@@ -142,6 +142,7 @@ const Orders: React.FC = () => {
     const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
     const [showReturnModal, setShowReturnModal] = useState(false);
     const [returnReason, setReturnReason] = useState('');
+    const [returnItems, setReturnItems] = useState<Array<{item_code: string; item_name: string; qty: number; selected: boolean; returnQty: number}>>([]);
 
     const fetchOrders = () => {
         const mobile = localStorage.getItem('checkout_mobile') || '';
@@ -197,7 +198,12 @@ const Orders: React.FC = () => {
             const res = await fetch(`${BASE}/api/method/store_customizations.api.orders.request_return`, {
                 method: 'POST', credentials: 'include',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': getCSRF() },
-                body: new URLSearchParams({ sales_order: orderName, reason: returnReason }).toString(),
+                body: (() => {
+                    const p = new URLSearchParams({ sales_order: orderName, reason: returnReason });
+                    const sel = returnItems.filter(i => i.selected && i.returnQty > 0);
+                    if (sel.length > 0) p.set('items', JSON.stringify(sel.map(i => ({ item_code: i.item_code, qty: i.returnQty }))));
+                    return p.toString();
+                })(),
             });
             const data = await res.json();
             if (data.message?.return_invoice) {
@@ -411,7 +417,16 @@ const Orders: React.FC = () => {
                             {returnAllowed && !showReturnModal && (
                                 <button
                                     className="order-action-btn return-btn"
-                                    onClick={() => setShowReturnModal(true)}
+                                    onClick={() => {
+                                        setReturnItems(o.items.map(item => ({
+                                            item_code: item.item_code,
+                                            item_name: item.item_name || item.item_code,
+                                            qty: item.qty,
+                                            selected: true,
+                                            returnQty: item.qty,
+                                        })));
+                                        setShowReturnModal(true);
+                                    }}
                                 >
                                     Request Return
                                 </button>
@@ -428,24 +443,52 @@ const Orders: React.FC = () => {
                         {showReturnModal && (
                             <div className="odp-return-section">
                                 <div className="odp-section-title" style={{ marginBottom: 8 }}>Return Request</div>
-                                <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-                                    Tell us why you want to return this order.
-                                    {returnDeadline !== null && (
-                                        <span style={{ color: '#f59e0b', fontWeight: 600 }}> ({returnDeadline} day{returnDeadline !== 1 ? 's' : ''} left)</span>
-                                    )}
-                                </p>
+                                {returnDeadline !== null && (
+                                    <p style={{ fontSize: 12, color: '#f59e0b', fontWeight: 600, marginBottom: 8 }}>
+                                        Return window: {returnDeadline} day{returnDeadline !== 1 ? 's' : ''} left
+                                    </p>
+                                )}
+                                <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>Select items to return:</p>
+                                <div className="return-items-list">
+                                    {returnItems.map((item, idx) => (
+                                        <div key={item.item_code} className="return-item-row">
+                                            <input
+                                                type="checkbox"
+                                                id={`ri-${idx}`}
+                                                checked={item.selected}
+                                                onChange={e => setReturnItems(prev => prev.map((it, i) =>
+                                                    i === idx ? { ...it, selected: e.target.checked } : it
+                                                ))}
+                                            />
+                                            <label htmlFor={`ri-${idx}`} className="return-item-name">{item.item_name}</label>
+                                            {item.selected && item.qty > 1 && (
+                                                <div className="return-qty-ctrl">
+                                                    <button type="button" onClick={() => setReturnItems(prev => prev.map((it, i) =>
+                                                        i === idx ? { ...it, returnQty: Math.max(1, it.returnQty - 1) } : it
+                                                    ))}>−</button>
+                                                    <span>{item.returnQty}</span>
+                                                    <button type="button" onClick={() => setReturnItems(prev => prev.map((it, i) =>
+                                                        i === idx ? { ...it, returnQty: Math.min(it.qty, it.returnQty + 1) } : it
+                                                    ))}>+</button>
+                                                    <span style={{ fontSize: 11, color: '#9ca3af' }}>/ {item.qty}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                                 <textarea
                                     className="return-reason-input"
                                     rows={3}
-                                    placeholder="Reason for return..."
+                                    placeholder="Reason for return (required)..."
                                     value={returnReason}
                                     onChange={e => setReturnReason(e.target.value)}
+                                    style={{ marginTop: 10 }}
                                 />
                                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                                     <button className="order-action-btn" onClick={() => { setShowReturnModal(false); setReturnReason(''); }}>Close</button>
                                     <button
                                         className="order-action-btn return-btn"
-                                        disabled={!returnReason.trim() || actionLoading[o.name]}
+                                        disabled={!returnReason.trim() || returnItems.every(i => !i.selected) || actionLoading[o.name]}
                                         onClick={() => handleRequestReturn(o.name)}
                                     >
                                         {actionLoading[o.name] ? 'Submitting…' : 'Submit Return'}

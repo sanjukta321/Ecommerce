@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
 import Footer from '../components/Footer';
+import ShareModal from '../components/ShareModal';
 import '../styles/ProductDetail.css';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -167,6 +168,8 @@ const ProductDetail: React.FC = () => {
     const [reviewCount, setReviewCount] = useState(0);
 
     // Variant state
+    const [shareModal, setShareModal] = useState<{ url: string; title: string; text: string } | null>(null);
+
     const [isTemplate, setIsTemplate] = useState(false);
     const [variantData, setVariantData] = useState<VariantData | null>(null);
     const [selectedColour, setSelectedColour] = useState('');
@@ -372,6 +375,27 @@ const ProductDetail: React.FC = () => {
                         onMouseLeave={() => setIsHoveringGallery(false)}>
                         <div className="main-image" onClick={() => setShowLightbox(true)}>
                             <img key={activeImage} src={galleryImages[activeImage] ?? displayImage} alt={product.name} />
+                            {/* Wishlist + Share overlay on image */}
+                            <div className="gallery-overlay-actions" onClick={e => e.stopPropagation()}>
+                                <button
+                                    className={`gallery-action-btn${isWishlisted(product.id) ? ' wishlisted' : ''}`}
+                                    onClick={() => toggleWishlist({ id: product.id, name: product.name, price: numericPrice, image: product.image })}
+                                    title={isWishlisted(product.id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                                </button>
+                                <button
+                                    className="gallery-action-btn"
+                                    onClick={() => setShareModal({
+                                        url: `${window.location.origin}/product/${product.id}`,
+                                        title: product.name,
+                                        text: `Check out ${product.name}`,
+                                    })}
+                                    title="Share this product"
+                                >
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                                </button>
+                            </div>
                             {galleryImages.length > 1 && (
                                 <>
                                     <button className="gallery-arrow gallery-prev"
@@ -617,13 +641,6 @@ const ProductDetail: React.FC = () => {
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
                                         Buy Now
                                     </button>
-                                    <button
-                                        className={`wishlist-btn ${isWishlisted(product.id) ? 'wishlisted' : ''}`}
-                                        onClick={() => toggleWishlist({ id: product.id, name: product.name, price: numericPrice, image: product.image })}
-                                        title={isWishlisted(product.id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
-                                    >
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-                                    </button>
                                 </>
                             )}
                         </div>
@@ -743,6 +760,15 @@ const ProductDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {shareModal && (
+                <ShareModal
+                    url={shareModal.url}
+                    title={shareModal.title}
+                    text={shareModal.text}
+                    onClose={() => setShareModal(null)}
+                />
             )}
 
             <Footer />

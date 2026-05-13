@@ -39,10 +39,13 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
     const [userData, setUserData] = useState<UserData>(EMPTY_USER);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [editing, setEditing] = useState<null | 'personal' | 'mobile'>(null);
+    const [editing, setEditing] = useState<null | 'personal' | 'mobile' | 'password'>(null);
     const [form, setForm] = useState<UserData>(EMPTY_USER);
     const [saving, setSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState('');
+    const [pwForm, setPwForm] = useState({ current: '', new: '', confirm: '' });
+    const [pwSaving, setPwSaving] = useState(false);
+    const [pwMsg, setPwMsg] = useState('');
     const [navToast, setNavToast] = useState('');
 
     // ── PAN state ─────────────────────────────────────────────
@@ -192,6 +195,39 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         setForm({ ...userData }); setEditing(section); setSaveMsg('');
     };
     const cancelEdit = () => { setEditing(null); setSaveMsg(''); };
+
+    const changePassword = async () => {
+        if (!pwForm.current || !pwForm.new || !pwForm.confirm) {
+            setPwMsg('All fields are required'); return;
+        }
+        if (pwForm.new !== pwForm.confirm) {
+            setPwMsg('New passwords do not match'); return;
+        }
+        if (pwForm.new.length < 8) {
+            setPwMsg('Password must be at least 8 characters'); return;
+        }
+        setPwSaving(true); setPwMsg('');
+        const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+        try {
+            const csrf = getCSRF();
+            const res = await fetch(`${BASE}/api/method/store_customizations.api.auth.change_password`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrf },
+                body: new URLSearchParams({ current_password: pwForm.current, new_password: pwForm.new }).toString(),
+            });
+            const data = await res.json();
+            if (data.message?.success) {
+                setPwMsg('Password changed successfully!');
+                setPwForm({ current: '', new: '', confirm: '' });
+                setEditing(null);
+            } else {
+                const err = data.exception?.split('\n').pop() || data.exc_type || 'Failed to change password';
+                setPwMsg(typeof err === 'string' ? err.replace(/^["\[]+|["\]]+$/g, '') : 'Failed to change password');
+            }
+        } catch {
+            setPwMsg('Network error. Please try again.');
+        } finally { setPwSaving(false); }
+    };
 
     const saveEdit = async () => {
         setSaving(true); setSaveMsg('');
@@ -583,6 +619,48 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                                         disabled={editing !== 'mobile'}
                                         onChange={e => setForm(f => ({ ...f, mobile_no: e.target.value }))} />
                                 </div>
+                            </section>
+
+                            {/* Change Password */}
+                            <section className="profile-section">
+                                <div className="section-header">
+                                    <h2>Change Password</h2>
+                                    {editing === 'password' ? (
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <button className="edit-btn" onClick={changePassword} disabled={pwSaving}>{pwSaving ? 'Saving…' : 'Save'}</button>
+                                            <button className="edit-btn" onClick={() => { setEditing(null); setPwMsg(''); setPwForm({ current: '', new: '', confirm: '' }); }} style={{ background: 'transparent', border: '1px solid var(--glass-border)' }}>Cancel</button>
+                                        </div>
+                                    ) : (
+                                        <button className="edit-btn" onClick={() => { setEditing('password'); setPwMsg(''); }}>Change</button>
+                                    )}
+                                </div>
+                                {editing === 'password' ? (
+                                    <div className="form-grid">
+                                        <div className="input-group full-width">
+                                            <input type="password" placeholder="Current password" value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} />
+                                        </div>
+                                        <div className="input-group">
+                                            <input type="password" placeholder="New password (min 8 chars)" value={pwForm.new} onChange={e => setPwForm(f => ({ ...f, new: e.target.value }))} />
+                                        </div>
+                                        <div className="input-group">
+                                            <input type="password" placeholder="Confirm new password" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} />
+                                        </div>
+                                        {pwMsg && (
+                                            <div className="input-group full-width" style={{
+                                                padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                                                background: pwMsg.includes('success') ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                                                color: pwMsg.includes('success') ? '#16a34a' : '#dc2626',
+                                                border: `1px solid ${pwMsg.includes('success') ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                                            }}>{pwMsg}</div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+                                        {pwMsg
+                                            ? <span style={{ color: '#16a34a', fontWeight: 600 }}>{pwMsg}</span>
+                                            : 'Set a strong password to keep your account secure.'}
+                                    </p>
+                                )}
                             </section>
 
                             {/* FAQs */}

@@ -98,7 +98,43 @@ def get_customer_addresses(mobile):
 
 
 @frappe.whitelist(allow_guest=True)
-def place_order(cart_items, address, payment_method, mobile=None, saved_address_name=None, loyalty_points=0):
+def validate_coupon(coupon_code):
+    """Validate a coupon code. Returns coupon info if valid, throws otherwise."""
+    if frappe.session.user == "Guest":
+        frappe.set_user("Administrator")
+
+    code = (coupon_code or "").strip().upper()
+    if not code:
+        frappe.throw("Coupon code required")
+
+    doc = frappe.db.get_value(
+        "Coupon Code",
+        {"coupon_code": code, "is_gift_card": ["!=", 1], "docstatus": ["!=", 2]},
+        ["name", "coupon_name", "coupon_type", "valid_from", "valid_upto",
+         "maximum_use", "used", "description"],
+        as_dict=True,
+    )
+    if not doc:
+        frappe.throw("Invalid coupon code. Please check and try again.")
+
+    today = frappe.utils.getdate(frappe.utils.today())
+    if doc.valid_upto and frappe.utils.getdate(doc.valid_upto) < today:
+        frappe.throw("This coupon has expired.")
+
+    if doc.maximum_use and int(doc.used or 0) >= int(doc.maximum_use):
+        frappe.throw("This coupon has reached its usage limit.")
+
+    return {
+        "valid": True,
+        "coupon_name": doc.coupon_name or code,
+        "coupon_type": doc.coupon_type or "",
+        "description": doc.description or "",
+        "valid_upto": str(doc.valid_upto or ""),
+    }
+
+
+@frappe.whitelist(allow_guest=True)
+def place_order(cart_items, address, payment_method, mobile=None, saved_address_name=None, loyalty_points=0, coupon_code=None):
     """
     Checkout flow:
       1. Resolve/create Customer + Address
@@ -127,7 +163,7 @@ def place_order(cart_items, address, payment_method, mobile=None, saved_address_
         address_name = _checkout_get_or_create_address(customer, address)
 
     # 2. Sales Order — helper inserts it, commit locks the naming series, then submit
-    so = _checkout_create_sales_order(customer, cart_items, address_name)
+    so = _checkout_create_sales_order(customer, cart_items, address_name, coupon_code=coupon_code)
     # Encode payment method into po_no with a unique suffix so Frappe never
     # rejects duplicate PO numbers across orders for the same customer.
     so.po_no = f"{payment_method}:{secrets.token_hex(4)}"
@@ -162,6 +198,13 @@ def place_order(cart_items, address, payment_method, mobile=None, saved_address_
             payment_status = "failed"
 
     frappe.db.commit()
+
+    if payment_status in ("paid", "cod"):
+        try:
+            from store_customizations.api.email_notifications import send_order_placed_email
+            send_order_placed_email(so.name)
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), "email: order placed")
 
     return {
         "success":        payment_status in ("paid", "cod"),
@@ -267,7 +310,7 @@ def _checkout_get_or_create_address(customer, address):
     return addr_doc.name
 
 
-def _checkout_create_sales_order(customer, cart_items, address_name=None):
+def _checkout_create_sales_order(customer, cart_items, address_name=None, coupon_code=None):
     """Create a draft Sales Order from cart items."""
     delivery_date = frappe.utils.add_days(frappe.utils.today(), 5)
     company = frappe.defaults.get_defaults().get("company") or frappe.db.get_value("Company", {}, "name")
@@ -294,6 +337,9 @@ def _checkout_create_sales_order(customer, cart_items, address_name=None):
             "rate":          float(item.get("price", 0)),
             "delivery_date": delivery_date,
         })
+
+    if coupon_code:
+        so.coupon_code = (coupon_code or "").strip().upper()
 
     so.flags.ignore_permissions = True
     so.insert(ignore_permissions=True)

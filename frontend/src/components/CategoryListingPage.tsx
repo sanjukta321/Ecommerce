@@ -13,6 +13,13 @@ interface Props {
   keywords: Record<string, string[]>;
 }
 
+function parseMinPriceNum(price: string | number | undefined): number {
+  if (price == null) return 0;
+  if (typeof price === 'number') return price;
+  const clean = price.replace(/[₹,\s]/g, '').split('–')[0].split('—')[0];
+  return parseFloat(clean) || 0;
+}
+
 const CategoryListingPage: React.FC<Props> = ({
   titlePrefix,
   titleHighlight,
@@ -23,7 +30,16 @@ const CategoryListingPage: React.FC<Props> = ({
 }) => {
   const [selectedSubcategory, setSelectedSubcategory] = useState('All');
   const [sortBy, setSortBy] = useState('popular');
-  const { products: liveProducts, loading } = useFrappeProducts(frappeCategory);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 999999]);
+  const [priceFilterActive, setPriceFilterActive] = useState(false);
+  const { products: liveProducts, loading, loadingMore, hasMore, loadMore } = useFrappeProducts(frappeCategory);
+
+  const priceMin = liveProducts.length > 0
+    ? Math.floor(Math.min(...liveProducts.map(p => parseMinPriceNum(p.price))))
+    : 0;
+  const priceMax = liveProducts.length > 0
+    ? Math.ceil(Math.max(...liveProducts.map(p => parseMinPriceNum(p.price))))
+    : 999999;
 
   const filteredProducts = (() => {
     let products = liveProducts;
@@ -40,17 +56,20 @@ const CategoryListingPage: React.FC<Props> = ({
       });
     }
 
+    if (priceFilterActive) {
+      products = products.filter(p => {
+        const price = parseMinPriceNum(p.price);
+        return price >= priceRange[0] && price <= priceRange[1];
+      });
+    }
+
     const sorted = [...products];
     switch (sortBy) {
       case 'price-low':
-        sorted.sort((a, b) =>
-          parseInt(a.price.replace(/[^\d]/g, '')) - parseInt(b.price.replace(/[^\d]/g, ''))
-        );
+        sorted.sort((a, b) => parseMinPriceNum(a.price) - parseMinPriceNum(b.price));
         break;
       case 'price-high':
-        sorted.sort((a, b) =>
-          parseInt(b.price.replace(/[^\d]/g, '')) - parseInt(a.price.replace(/[^\d]/g, ''))
-        );
+        sorted.sort((a, b) => parseMinPriceNum(b.price) - parseMinPriceNum(a.price));
         break;
       case 'rating':
         sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
@@ -91,6 +110,29 @@ const CategoryListingPage: React.FC<Props> = ({
               <option value="rating">Highest Rated</option>
             </select>
           </div>
+          {!loading && liveProducts.length > 0 && priceMax > priceMin && (
+            <div className="price-filter-group">
+              <label>Price:</label>
+              <span className="price-filter-val">₹{priceRange[0].toLocaleString('en-IN')}</span>
+              <input
+                type="range"
+                className="price-range-slider"
+                min={priceMin}
+                max={priceMax}
+                step={Math.max(1, Math.floor((priceMax - priceMin) / 100))}
+                value={priceRange[1]}
+                onChange={e => {
+                  const val = Number(e.target.value);
+                  setPriceRange([priceMin, val]);
+                  setPriceFilterActive(val < priceMax);
+                }}
+              />
+              <span className="price-filter-val">₹{priceRange[1].toLocaleString('en-IN')}</span>
+              {priceFilterActive && (
+                <button className="price-filter-reset" onClick={() => { setPriceRange([0, 999999]); setPriceFilterActive(false); }}>✕</button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="products-grid fade-in">
@@ -108,6 +150,18 @@ const CategoryListingPage: React.FC<Props> = ({
             ))
           )}
         </div>
+
+        {hasMore && !loading && (
+          <div style={{ textAlign: 'center', margin: '24px 0' }}>
+            <button
+              className="load-more-btn"
+              onClick={loadMore}
+              disabled={loadingMore}
+            >
+              {loadingMore ? 'Loading…' : 'Load More'}
+            </button>
+          </div>
+        )}
       </div>
       <Footer />
     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { api, post, del, BASE_URL as BASE } from '../../services/client';
 
@@ -117,6 +117,12 @@ export default function AdminProducts() {
   const [stockQty, setStockQty]           = useState('');
   const [stockSaving, setStockSaving]     = useState(false);
 
+  // CSV import
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvResult, setCsvResult] = useState<{ success: any[]; errors: any[]; total: number } | null>(null);
+  const [showCsvResult, setShowCsvResult] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
   // Variant expand in table
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
   const [templateVariants, setTemplateVariants]  = useState<Record<string, VariantRow[]>>({});
@@ -146,6 +152,36 @@ export default function AdminProducts() {
       setAllAttrs(d.message || []);
     } catch {}
   }, []);
+
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setCsvImporting(true);
+    try {
+      const text = await file.text();
+      const csrf = (window as any).frappe?.csrf_token ||
+        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch';
+      const res = await fetch(`${BASE}/api/method/store_customizations.api.admin.import_products_csv`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Frappe-CSRF-Token': csrf },
+        body: new URLSearchParams({ csv_data: text }).toString(),
+      });
+      const data = await res.json();
+      if (data.message) {
+        setCsvResult(data.message);
+        setShowCsvResult(true);
+        if ((data.message.success?.length || 0) > 0) fetchItems();
+      } else {
+        const err = data.exception?.split('\n').pop() || data.exc_type || 'Import failed';
+        alert(typeof err === 'string' ? err.replace(/^["\[]+|["\]]+$/g, '') : 'Import failed');
+      }
+    } catch {
+      alert('Network error during import');
+    } finally {
+      setCsvImporting(false);
+    }
+  };
 
   useEffect(() => { fetchItems(); fetchItemGroups(); fetchAttrs(); }, []);
 
@@ -483,6 +519,21 @@ export default function AdminProducts() {
               </svg>
               <input type="text" placeholder="Search products…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
+            <input
+              type="file"
+              accept=".csv"
+              ref={csvInputRef}
+              style={{ display: 'none' }}
+              onChange={handleCsvImport}
+            />
+            <button
+              className="csv-import-btn"
+              onClick={() => csvInputRef.current?.click()}
+              disabled={csvImporting}
+              title="Import products from CSV"
+            >
+              {csvImporting ? 'Importing…' : '↑ Import CSV'}
+            </button>
             <button className="admin-btn-primary" onClick={() => setMode('choose')}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -1033,6 +1084,67 @@ export default function AdminProducts() {
                 <button type="button" className="admin-btn-secondary" style={{ padding: '10px 20px' }} onClick={() => setShowAddGroup(false)}>Cancel</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* CSV Import Result Modal */}
+      {showCsvResult && csvResult && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }} onClick={() => setShowCsvResult(false)}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: 28, maxWidth: 540, width: '90%',
+            maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700 }}>Import Results</h3>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+              <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#059669' }}>{csvResult.success.length}</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Imported</div>
+              </div>
+              <div style={{ flex: 1, background: csvResult.errors.length > 0 ? '#fef2f2' : '#f8fafc', border: `1px solid ${csvResult.errors.length > 0 ? '#fecaca' : '#e2e8f0'}`, borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: csvResult.errors.length > 0 ? '#dc2626' : '#9ca3af' }}>{csvResult.errors.length}</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Errors</div>
+              </div>
+              <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#374151' }}>{csvResult.total}</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Total Rows</div>
+              </div>
+            </div>
+            {csvResult.errors.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Errors:</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {csvResult.errors.map((e, i) => (
+                    <div key={i} style={{ fontSize: 12, padding: '6px 10px', background: '#fef2f2', borderRadius: 6, color: '#7f1d1d' }}>
+                      <strong>Row {e.row}{e.item ? ` (${e.item})` : ''}:</strong> {e.error}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {csvResult.success.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#059669', marginBottom: 8 }}>Imported successfully:</p>
+                <div style={{ maxHeight: 150, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {csvResult.success.map((s, i) => (
+                    <div key={i} style={{ fontSize: 12, padding: '4px 10px', background: '#f0fdf4', borderRadius: 6, color: '#065f46' }}>
+                      Row {s.row}: <strong>{s.item}</strong> → {s.code}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
+              CSV columns: <code>item_name</code> (required), <code>item_group</code> (required), <code>price</code> (required), <code>description</code>, <code>stock_qty</code>, <code>published</code> (1/0)
+            </p>
+            <button
+              onClick={() => setShowCsvResult(false)}
+              style={{ width: '100%', padding: '10px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

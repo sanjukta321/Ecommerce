@@ -758,3 +758,75 @@ def save_seller_product(
         published=published,
         item_code=item_code,
     )
+
+
+@frappe.whitelist(methods=["POST"])
+def import_products_csv(csv_data):
+    """
+    Bulk-import products from CSV text.
+    Required columns: item_name, item_group, price
+    Optional columns: description, stock_qty, published (1/0)
+    Returns: {success: [{row, item, code}], errors: [{row, item, error}]}
+    """
+    if "System Manager" not in frappe.get_roles():
+        frappe.throw("Not permitted", frappe.PermissionError)
+
+    import csv
+    import io
+
+    if not csv_data or not csv_data.strip():
+        frappe.throw("CSV data is empty")
+
+    reader = csv.DictReader(io.StringIO(csv_data.strip()))
+    required_cols = {"item_name", "item_group", "price"}
+    if not reader.fieldnames:
+        frappe.throw("Could not parse CSV headers")
+
+    headers = {h.strip().lower() for h in reader.fieldnames}
+    missing = required_cols - headers
+    if missing:
+        frappe.throw(f"Missing required columns: {', '.join(sorted(missing))}")
+
+    results = {"success": [], "errors": [], "total": 0}
+
+    for i, raw_row in enumerate(reader, start=2):
+        results["total"] += 1
+        # Normalize keys to lowercase/stripped
+        row = {k.strip().lower(): (v or "").strip() for k, v in raw_row.items() if k}
+        item_name = row.get("item_name", "").strip()
+
+        try:
+            if not item_name:
+                raise ValueError("item_name is required")
+
+            price_str = row.get("price", "0").replace(",", "").replace("₹", "").strip()
+            price = float(price_str)
+            if price <= 0:
+                raise ValueError(f"price must be > 0, got '{price_str}'")
+
+            item_group = row.get("item_group", "").strip() or "All Item Groups"
+            description = row.get("description", "").strip()
+            stock_qty = float(row.get("stock_qty", "0").replace(",", "") or 0)
+            published = int(row.get("published", "1") or 1)
+
+            result = save_admin_product(
+                item_name=item_name,
+                item_group=item_group,
+                price=price,
+                description=description,
+                stock_qty=stock_qty,
+                images=[],
+                published=published,
+            )
+            results["success"].append({
+                "row": i,
+                "item": item_name,
+                "code": result.get("item_code", ""),
+            })
+
+        except Exception as exc:
+            err_msg = str(exc).split("\n")[0][:200]
+            results["errors"].append({"row": i, "item": item_name, "error": err_msg})
+
+    frappe.db.commit()
+    return results

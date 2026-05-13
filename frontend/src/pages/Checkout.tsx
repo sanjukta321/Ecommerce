@@ -70,6 +70,10 @@ const Checkout: React.FC = () => {
     const [loyaltyBalance, setLoyaltyBalance] = useState<{ points: number; value: number } | null>(null);
     const [redeemLoyalty, setRedeemLoyalty] = useState(false);
     const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
+    const [savedPayments, setSavedPayments] = useState<{ upi: Array<{id: string; upi: string}>; cards: Array<{id: string; last4: string; card_type: string; holder_name: string; expiry_month: string; expiry_year: string}> }>({ upi: [], cards: [] });
+    const [selectedSavedUpi, setSelectedSavedUpi] = useState<string>('');
+    const [upiInput, setUpiInput] = useState('');
+    const [selectedSavedCard, setSelectedSavedCard] = useState<string>('');
 
     // Step 4: Success
     const [orderId, setOrderId] = useState('');
@@ -83,6 +87,17 @@ const Checkout: React.FC = () => {
         })
             .then(r => r.json())
             .then(d => { if (d.message?.points > 0) setLoyaltyBalance(d.message); })
+            .catch(() => {});
+    }, [step]);
+
+    useEffect(() => {
+        if (step !== 'payment') return;
+        fetch(`${BASE}/api/method/store_customizations.api.customer.get_saved_payments`, {
+            credentials: 'include',
+            headers: { 'X-Frappe-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch' },
+        })
+            .then(r => r.json())
+            .then(d => { if (d.message) setSavedPayments(d.message); })
             .catch(() => {});
     }, [step]);
 
@@ -221,12 +236,14 @@ const Checkout: React.FC = () => {
                 quantity: item.quantity,
             }));
 
+            const appliedCoupon = localStorage.getItem('applied_coupon') || '';
             const params = new URLSearchParams({
                 cart_items:          JSON.stringify(cartPayload),
                 address:             JSON.stringify(address),
                 payment_method:      paymentMethod,
                 mobile:              mobile,
             });
+            if (appliedCoupon) params.set('coupon_code', appliedCoupon);
             if (selectedSavedAddress) {
                 params.set('saved_address_name', selectedSavedAddress.name);
             }
@@ -255,6 +272,7 @@ const Checkout: React.FC = () => {
                 setInvoiceId(data.message.sales_invoice || '');
                 if (mobile) localStorage.setItem('checkout_mobile', mobile);
                 clearCart();
+                localStorage.removeItem('applied_coupon');
                 setStep('success');
             } else {
                 const errMsg =
@@ -461,7 +479,71 @@ const Checkout: React.FC = () => {
 
                                 {paymentMethod === 'upi' && (
                                     <div className="upi-input fade-in">
-                                        <input type="text" placeholder="Enter VPA / UPI ID (e.g. user@okaxis)" />
+                                        {savedPayments.upi.length > 0 && (
+                                            <div className="saved-payment-list">
+                                                {savedPayments.upi.map(u => (
+                                                    <label key={u.id} className={`saved-payment-option ${selectedSavedUpi === u.upi ? 'selected' : ''}`}>
+                                                        <input
+                                                            type="radio"
+                                                            name="saved_upi"
+                                                            value={u.upi}
+                                                            checked={selectedSavedUpi === u.upi}
+                                                            onChange={() => { setSelectedSavedUpi(u.upi); setUpiInput(''); }}
+                                                        />
+                                                        <span className="saved-upi-id">{u.upi}</span>
+                                                    </label>
+                                                ))}
+                                                <label className={`saved-payment-option ${selectedSavedUpi === '' ? 'selected' : ''}`}>
+                                                    <input
+                                                        type="radio"
+                                                        name="saved_upi"
+                                                        value=""
+                                                        checked={selectedSavedUpi === ''}
+                                                        onChange={() => setSelectedSavedUpi('')}
+                                                    />
+                                                    <span>Enter new UPI ID</span>
+                                                </label>
+                                            </div>
+                                        )}
+                                        {selectedSavedUpi === '' && (
+                                            <input
+                                                type="text"
+                                                placeholder="Enter VPA / UPI ID (e.g. user@okaxis)"
+                                                value={upiInput}
+                                                onChange={e => setUpiInput(e.target.value)}
+                                            />
+                                        )}
+                                    </div>
+                                )}
+
+                                {paymentMethod === 'card' && (
+                                    <div className="card-input fade-in">
+                                        {savedPayments.cards.length > 0 && (
+                                            <div className="saved-payment-list">
+                                                {savedPayments.cards.map(c => (
+                                                    <label key={c.id} className={`saved-payment-option ${selectedSavedCard === c.id ? 'selected' : ''}`}>
+                                                        <input
+                                                            type="radio"
+                                                            name="saved_card"
+                                                            value={c.id}
+                                                            checked={selectedSavedCard === c.id}
+                                                            onChange={() => setSelectedSavedCard(c.id)}
+                                                        />
+                                                        <span className="saved-card-info">
+                                                            {c.card_type} •••• {c.last4}
+                                                            <span style={{ color: '#9ca3af', fontSize: 11, marginLeft: 6 }}>
+                                                                {c.holder_name} · {c.expiry_month}/{c.expiry_year}
+                                                            </span>
+                                                        </span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {savedPayments.cards.length === 0 && (
+                                            <p style={{ fontSize: 13, color: '#9ca3af', margin: '8px 0' }}>
+                                                No saved cards. Add a card in your profile.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
 

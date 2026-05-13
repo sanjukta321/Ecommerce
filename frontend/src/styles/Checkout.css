@@ -645,3 +645,22 @@
     border-radius: 6px;
     font-size: 13px;
 }
+
+/* Saved payments */
+.saved-payment-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.saved-payment-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: border-color 0.2s, background 0.2s;
+}
+.saved-payment-option.selected { border-color: var(--accent); background: rgba(var(--accent-rgb, 99,102,241), 0.06); }
+.saved-payment-option input[type="radio"] { accent-color: var(--accent); }
+.saved-upi-id { font-weight: 600; color: var(--text-main); }
+.saved-card-info { font-weight: 600; color: var(--text-main); }
+.card-input { margin-top: 10px; }

@@ -4,7 +4,7 @@ import frappe
 
 
 @frappe.whitelist(allow_guest=True)
-def get_all_products(item_group=None, limit=100):
+def get_all_products(item_group=None, limit=20, offset=0):
     """Return all products, accessible by guest, optionally filtered by item_group."""
     if frappe.session.user == "Guest":
         frappe.set_user("Administrator")
@@ -17,7 +17,8 @@ def get_all_products(item_group=None, limit=100):
         "Item",
         filters=filters,
         fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled", "has_variants"],
-        limit=limit,
+        limit=int(limit),
+        start=int(offset),
     )
 
     if not items:
@@ -232,7 +233,8 @@ def get_all_products(item_group=None, limit=100):
             raw = [item["image"]]
         item["images"] = [_resolve_img(i) for i in raw if i]
 
-    return items
+    total_count = frappe.db.count("Item", filters={"disabled": 0, "variant_of": ["is", "not set"], **({"item_group": item_group} if item_group else {})})
+    return {"items": items, "total": total_count, "offset": int(offset), "limit": int(limit)}
 
 
 @frappe.whitelist(allow_guest=True)

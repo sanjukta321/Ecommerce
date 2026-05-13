@@ -108,3 +108,27 @@ def update_profile_photo(file_url):
     frappe.db.set_value("User", user, "user_image", file_url)
     frappe.db.commit()
     return {"user_image": file_url}
+
+
+@frappe.whitelist(methods=["POST"])
+def change_password(current_password, new_password):
+    """Change the logged-in user's password after verifying current password."""
+    user = frappe.session.user
+    if not user or user == "Guest":
+        frappe.throw("Not logged in", frappe.PermissionError)
+
+    if not current_password or not new_password:
+        frappe.throw("Current password and new password are required")
+
+    if len(new_password) < 8:
+        frappe.throw("New password must be at least 8 characters")
+
+    from frappe.utils.password import check_password, update_password
+    try:
+        check_password(user, current_password)
+    except frappe.AuthenticationError:
+        frappe.throw("Current password is incorrect")
+
+    update_password(user, new_password)
+    frappe.db.commit()
+    return {"success": True}

@@ -788,3 +788,19 @@
 @media (max-width: 480px) {
   .admin-stats-grid { grid-template-columns: 1fr; }
 }
+
+/* CSV Import Button */
+.csv-import-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #6366f1;
+  color: #6366f1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.csv-import-btn:hover { background: #6366f1; color: #fff; }
+.csv-import-btn:disabled { opacity: 0.5; cursor: not-allowed; }

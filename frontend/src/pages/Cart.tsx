@@ -1,12 +1,57 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import Footer from '../components/Footer';
 import '../styles/Cart.css';
 
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+
 const Cart: React.FC = () => {
     const navigate = useNavigate();
     const { cart, removeFromCart, updateQuantity, clearCart, cartTotal } = useCart();
+
+    const [couponInput, setCouponInput] = useState('');
+    const [couponLoading, setCouponLoading] = useState(false);
+    const [couponMsg, setCouponMsg] = useState('');
+    const [couponValid, setCouponValid] = useState(false);
+    const [appliedCoupon, setAppliedCoupon] = useState<string>(() => localStorage.getItem('applied_coupon') || '');
+
+    const handleApplyCoupon = async () => {
+        const code = couponInput.trim().toUpperCase();
+        if (!code) { setCouponMsg('Enter a coupon code'); return; }
+        setCouponLoading(true);
+        setCouponMsg('');
+        try {
+            const res = await fetch(
+                `${BASE}/api/method/store_customizations.api.checkout.validate_coupon?coupon_code=${encodeURIComponent(code)}`,
+                { credentials: 'include' }
+            );
+            const data = await res.json();
+            if (data.message?.valid) {
+                setAppliedCoupon(code);
+                localStorage.setItem('applied_coupon', code);
+                setCouponValid(true);
+                setCouponMsg(`✓ Coupon applied! ${data.message.description || data.message.coupon_name}`);
+            } else {
+                const err = data.exception?.split('\n').pop() || data.exc_type || 'Invalid coupon';
+                setCouponMsg(typeof err === 'string' ? err.replace(/^["\[]+|["\]]+$/g, '') : 'Invalid coupon');
+                setCouponValid(false);
+            }
+        } catch {
+            setCouponMsg('Could not validate coupon. Try again.');
+            setCouponValid(false);
+        } finally {
+            setCouponLoading(false);
+        }
+    };
+
+    const handleRemoveCoupon = () => {
+        setAppliedCoupon('');
+        setCouponInput('');
+        setCouponMsg('');
+        setCouponValid(false);
+        localStorage.removeItem('applied_coupon');
+    };
 
     if (cart.length === 0) {
         return (
@@ -90,6 +135,39 @@ const Cart: React.FC = () => {
                                 <div className="savings-tag">🎉 You saved ₹99 on delivery!</div>
                             )}
                         </div>
+
+                            {/* Coupon section */}
+                            <div className="coupon-section">
+                                {appliedCoupon ? (
+                                    <div className="coupon-applied-row">
+                                        <span className="coupon-applied-tag">🏷 {appliedCoupon}</span>
+                                        <button className="coupon-remove-btn" onClick={handleRemoveCoupon}>✕</button>
+                                    </div>
+                                ) : (
+                                    <div className="coupon-input-row">
+                                        <input
+                                            type="text"
+                                            className="coupon-input"
+                                            placeholder="Coupon code"
+                                            value={couponInput}
+                                            onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponMsg(''); }}
+                                            onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+                                        />
+                                        <button
+                                            className="coupon-apply-btn"
+                                            onClick={handleApplyCoupon}
+                                            disabled={couponLoading || !couponInput.trim()}
+                                        >
+                                            {couponLoading ? '...' : 'Apply'}
+                                        </button>
+                                    </div>
+                                )}
+                                {couponMsg && (
+                                    <p className={`coupon-msg ${couponValid ? 'coupon-msg-valid' : 'coupon-msg-error'}`}>
+                                        {couponMsg}
+                                    </p>
+                                )}
+                            </div>
 
                         <div className="summary-divider" />
 

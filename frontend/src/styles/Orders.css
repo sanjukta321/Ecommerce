@@ -439,3 +439,25 @@
     .order-detail-panel { max-width: 100%; }
     .occ-thumb { width: 44px; height: 52px; }
 }
+
+/* Return items selection */
+.return-items-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.return-item-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    font-size: 13px;
+}
+.return-item-row input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; }
+.return-item-name { flex: 1; font-weight: 500; color: var(--text-main); }
+.return-qty-ctrl { display: flex; align-items: center; gap: 6px; }
+.return-qty-ctrl button {
+    width: 24px; height: 24px; border-radius: 6px;
+    border: 1px solid var(--input-border); background: var(--input-bg);
+    color: var(--text-main); cursor: pointer; font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+}
+.return-qty-ctrl span { font-weight: 700; min-width: 18px; text-align: center; font-size: 13px; }

@@ -84,29 +84,6 @@
     transform: translateY(-5px);
 }
 
-.remove-btn {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.9);
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 10;
-    transition: all 0.3s ease;
-    color: #ff4d4d;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-.remove-btn:hover {
-    background: #ff4d4d;
-    color: white;
-}
 
 .item-image {
     width: 100%;
@@ -167,4 +144,135 @@
     .wishlist-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* ── Wishlist header with share button ─────────────────────────────────────── */
+
+.wishlist-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.share-wishlist-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1.5px solid var(--accent);
+    color: var(--accent);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.share-wishlist-btn:hover {
+    background: var(--accent);
+    color: var(--bg-main);
+}
+
+/* ── Card top actions (remove + share per card) ────────────────────────────── */
+
+.card-top-actions {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+}
+
+.remove-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #ff4d4d;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.remove-btn:hover {
+    background: #ff4d4d;
+    color: white;
+}
+
+.item-share-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--accent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.item-share-btn:hover {
+    background: var(--accent);
+    color: white;
+}
+
+
+/* ── Shared wishlist view header ───────────────────────────────────────────── */
+
+.shared-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.shared-sub {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.view-mine-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 18px;
+    background: var(--accent);
+    color: var(--bg-main);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.view-mine-btn:hover {
+    opacity: 0.88;
+}
+
+/* ── Card skeleton loader ───────────────────────────────────────────────────── */
+
+.wishlist-card-skeleton {
+    height: 360px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--input-bg) 25%, var(--input-border) 50%, var(--input-bg) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s infinite;
+}
+
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
