@@ -69,8 +69,25 @@ home_page = "shop"
 fixtures = [
     {
         "dt": "Custom Field",
-        "filters": [["module", "=", "Store Customizations"]],
-    }
+        "filters": [
+            ["fieldname", "in", [
+                # Coupon Code — gift card fields
+                "is_gift_card", "gift_card_pin", "gift_card_balance",
+                "recipient_name", "recipient_email", "gift_message", "purchased_by",
+                # Customer — PAN fields
+                "pan_number", "pan_holder_name", "pan_dob", "pan_verified",
+                # Customer — payment storage fields
+                "saved_upi_json", "saved_cards_json",
+            ]]
+        ],
+    },
+    {
+        "dt": "Custom DocPerm",
+        "filters": [
+            ["parent", "=", "Sales Invoice"],
+            ["role", "=", "Invoice Reader"],
+        ],
+    },
 ]
 
 # SPA routing — all React Router paths serve the same index.html shell.
