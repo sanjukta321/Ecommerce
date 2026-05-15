@@ -1,182 +1,230 @@
-# Ecommerce COD Flow (Frappe + ERPNext)
+# Store Customizations — Frappe/ERPNext E-commerce App
 
-## Overview
-This document explains the **Cash on Delivery (COD)** flow implementation in an Ecommerce system using Frappe and ERPNext.
+A full-stack e-commerce platform built on **Frappe + ERPNext**, with a React (Vite + TypeScript) frontend served as a custom Frappe app. Covers customer storefront, admin portal, and seller portal — all backed by ERPNext doctypes (Sales Order, Sales Invoice, Delivery Note, Payment Entry, Item, Customer, etc.).
 
 ---
 
-## Flow Diagram
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend framework | Frappe v15 |
+| ERP backend | ERPNext v15 |
+| Frontend | React 18 + TypeScript + Vite |
+| Styling | Custom CSS (no UI framework) |
+| Auth | Frappe session + CSRF token |
+| Build | Vite (chunks), `bench build` (asset linking) |
+
+---
+
+## Project Structure
 
 ```
-Cart → Checkout → Place Order → Sales Order → Sales Invoice → Delivery → Payment (COD)
-```
-
----
-
-## Key Concept
-
-- In COD (Cash on Delivery):
-  - Customer pays **after delivery**
-  - No online payment required at checkout
-  - Invoice is created but remains **unpaid**
-
----
-
-## Implementation Status
-
-| Step | Component | Status |
-|------|-----------|--------|
-| Cart | `CartContext.tsx`, `Cart.tsx` | ✅ Complete |
-| Checkout (mobile OTP + address + payment) | `Checkout.tsx` | ✅ Complete |
-| Place Order API | `api.py → place_order()` | ✅ Complete |
-| Create Customer (new or existing) | `api.py → _checkout_resolve_customer()` | ✅ Complete |
-| Create Sales Order (submit) | `api.py → _checkout_create_sales_order()` | ✅ Complete |
-| Create Sales Invoice (submit, Unpaid) | `api.py → _checkout_create_sales_invoice()` | ✅ Complete |
-| No Payment Entry at checkout for COD | `api.py → place_order()` | ✅ Complete |
-| Delivery Note creation | `api.py → create_delivery_note()` | ✅ Complete |
-| COD payment collection | `api.py → collect_cod_payment()` | ✅ Complete |
-| Payment Entry (admin action) | `api.py → _checkout_create_payment_entry()` | ✅ Complete |
-| 5-state order status tracking | `api.py → _order_ecom_status()` | ✅ Complete |
-| Admin UI — Ship & Collect COD actions | `AdminOrders.tsx` | ✅ Complete |
-| Customer order progress bar | `Orders.tsx → OrderProgressBar` | ✅ Complete |
-
----
-
-## Step-by-Step Flow
-
-### 1. Cart
-- User adds items to cart
-- Data stored in React state + persisted to `localStorage`
-- Route: `/cart` → `Cart.tsx`
-- Context: `CartContext.tsx` (addToCart, removeFromCart, updateQuantity, clearCart)
-
----
-
-### 2. Checkout
-User provides:
-- Mobile Number (verified via 6-digit OTP — `send_checkout_otp` / `verify_checkout_otp`)
-- Name + Address (new form or saved address from Frappe)
-- Payment Method: **COD**, UPI, or Card
-
-Route: `/checkout` → `Checkout.tsx` (4 steps: mobile → address → payment → success)
-
----
-
-### 3. Place Order (API Call)
-
-Frontend sends POST to:
-```
-/api/method/store_customizations.api.place_order
-```
-
-Payload: `cart_items`, `address`, `payment_method`, `mobile`, `saved_address_name` (optional)
-
----
-
-### 4. Backend Processing (Frappe)
-
-#### Create Customer
-- Logged-in user → looked up by email via Contact → Customer link
-- Guest → looked up by mobile number
-- If not found → new Customer record created from checkout form
-
-#### Create Sales Order
-- Draft SO created from cart items with delivery date +5 days
-- `payment_method` stored in `po_no` field for COD tracking
-- SO submitted immediately after naming series commit
-
-#### Create Sales Invoice
-- SI created from submitted SO (via `make_sales_invoice` or manual)
-- SI submitted — status stays **Unpaid** for COD
-
-#### No Payment Entry
-- COD: Payment Entry is **skipped** at this stage
-- Online (UPI/Card): Payment Entry created and submitted immediately
-
----
-
-### 5. Delivery Process (Admin Action)
-
-Admin clicks **"Ship"** on any Confirmed order in `/admin/orders`:
-- Backend: `create_delivery_note(sales_order)`
-- Creates Delivery Note from SO via `make_delivery_note`
-- DN submitted → order status becomes **Shipped**
-
----
-
-### 6. Payment Collection (COD)
-
-After delivery:
-- Customer pays cash to delivery agent
-- Order status is **Delivered**
-- Admin sees the "Awaiting COD Payment" stat card on the orders page
-
----
-
-### 7. Payment Entry (Admin Action)
-
-Admin clicks **"Collect COD"** on a Delivered order in `/admin/orders`:
-- Backend: `collect_cod_payment(sales_invoice)`
-- Creates and submits a Payment Entry linked to the Sales Invoice
-- Order status becomes **Paid**
-
-Equivalent manual approach in Frappe Desk:
-- Go to Sales Invoice → Click **Create → Payment**
-
-Programmatic equivalent:
-```python
-pe = frappe.get_doc({
-    "doctype": "Payment Entry",
-    "payment_type": "Receive",
-    "party_type": "Customer",
-    "party": customer,
-    "paid_amount": amount,
-    "received_amount": amount,
-    "reference_no": "COD",
-    "reference_date": frappe.utils.nowdate(),
-    "references": [{
-        "reference_doctype": "Sales Invoice",
-        "reference_name": invoice_name,
-        "allocated_amount": amount
-    }]
-})
-pe.insert(ignore_permissions=True)
-pe.submit()
+store_customizations/
+├── frontend/src/
+│   ├── pages/
+│   │   ├── admin/          # Admin portal (Dashboard, Orders, Products, Customers, Sellers, Reports, Settings)
+│   │   ├── seller/         # Seller portal (Dashboard, Products, Orders, Inventory, Payments, Analytics, Returns)
+│   │   └── profile/        # Customer profile sections (Coupons, Gift Cards, Reviews, Saved Cards, UPI, Notifications)
+│   ├── components/         # Shared UI components
+│   ├── services/           # API client, auth, product/customer services
+│   └── api/                # Frappe API wrappers
+├── store_customizations/api/
+│   ├── checkout.py         # OTP, place_order, address, coupon, payment
+│   ├── orders.py           # Order listing, delivery, COD, returns, cancellation
+│   ├── products.py         # Product listing, detail, variants, attributes, item groups
+│   ├── email_notifications.py  # Order email triggers
+│   ├── admin.py            # Admin-specific helpers
+│   ├── auth.py             # Login/logout/session
+│   ├── customer.py         # Customer lookup, CSRF token
+│   ├── addresses.py        # Address CRUD
+│   ├── notifications.py    # In-app notifications
+│   ├── registration.py     # New user/seller registration
+│   └── reviews.py          # Product reviews
+└── store_customizations/public/   # Built frontend assets (Vite output)
 ```
 
 ---
 
-## Order Status Table
+## Features
 
-| Status    | Description                  | Triggered by                    |
-|-----------|------------------------------|---------------------------------|
-| Pending   | Order placed, SO submitted   | `place_order` API               |
-| Confirmed | SO is active, awaiting ship  | SO status from ERPNext          |
-| Shipped   | Delivery Note created        | Admin "Ship" action             |
-| Delivered | DN completed/submitted       | DN status from ERPNext          |
-| Paid      | Payment Entry completed      | Admin "Collect COD" action      |
+### Customer Storefront
+
+| Feature | Details |
+|---------|---------|
+| Product browsing | Browse by category (Electronics, Fashion, Books, Sports, Furniture, Accessories), New Arrivals, Offers |
+| Product detail | Multi-image gallery, variants (size/color/etc.), attributes, stock check |
+| Search | Full-text product search with results page |
+| Cart | Persistent cart (React context + localStorage) |
+| Wishlist | Add/remove items, share wishlist via unique link |
+| Checkout | 4-step: mobile OTP → address → payment method → success |
+| Payment methods | COD, UPI, Card |
+| Coupon codes | Validation + discount at checkout |
+| Loyalty points | Redeem at checkout |
+| Order tracking | 5-state progress bar: Pending → Confirmed → Shipped → Delivered → Paid |
+| Order history | Full order list with invoice download |
+| Returns | Request return with reason + item selection |
+| Profile | Saved addresses, saved cards/UPI, coupons, gift cards, reviews, notification preferences |
+
+### Admin Portal (`/admin`)
+
+| Page | Features |
+|------|---------|
+| Dashboard | Revenue, orders, products, sellers, customers KPIs; recent orders table; top products by price |
+| Orders | Full order list, status filter, Ship / Collect COD / Mark Delivered actions, invoice PDF download |
+| Products | Create/edit items, multi-image upload, item group management, variant & attribute configuration, no-image filter |
+| Customers | Customer list, details, order history per customer |
+| Sellers | Seller management, approval, listing |
+| Reports | Sales analytics, export |
+| Settings | Store configuration |
+
+### Seller Portal (`/seller`)
+
+| Page | Features |
+|------|---------|
+| Dashboard | Revenue and order summary for the seller's own products |
+| Products | Manage own product listings |
+| Orders | View orders for own products |
+| Inventory | Stock levels |
+| Payments | Payment history |
+| Analytics | Sales charts |
+| Returns | Handle return requests |
+| Profile | Seller profile management |
 
 ---
 
-## Additional APIs
+## Checkout & Order Flow
 
-| Endpoint | Purpose |
-|----------|---------|
-| `send_checkout_otp(mobile)` | Send 6-digit OTP for checkout mobile verification |
-| `verify_checkout_otp(mobile, otp)` | Validate checkout OTP (5-attempt lockout, 5-min TTL) |
-| `get_customer_addresses(mobile)` | Return saved addresses for a customer |
-| `get_my_orders(mobile)` | Return customer's orders with 5-state status |
-| `get_order_status(sales_order)` | Return full status detail for one order |
-| `get_admin_orders(limit)` | Return all orders enriched with COD status for admin |
-| `create_delivery_note(sales_order)` | Create + submit Delivery Note (admin) |
-| `collect_cod_payment(sales_invoice)` | Create + submit Payment Entry for COD (admin) |
+```
+Cart → Checkout (OTP + Address + Payment) → place_order API
+  → resolve/create Customer
+  → create + submit Sales Order
+  → create + submit Sales Invoice (Unpaid for COD)
+  → [Online] create + submit Payment Entry immediately
+  → [COD]   skip Payment Entry → Admin "Collect COD" later
+```
+
+### COD-specific flow
+
+```
+Order placed (SI = Draft/Unpaid)
+  → Admin ships → Delivery Note created + submitted (status: Shipped)
+  → Delivery confirmed → mark_order_delivered (status: Delivered)
+  → Admin collects cash → collect_cod_payment → Payment Entry submitted (status: Paid)
+```
+
+### Order Status Map
+
+| Status | Trigger |
+|--------|---------|
+| Pending | SO submitted by `place_order` |
+| Confirmed | SO active in ERPNext |
+| Shipped | Delivery Note created by admin |
+| Delivered | DN submitted / `mark_order_delivered` |
+| Paid | Payment Entry submitted (COD collection or online payment) |
 
 ---
 
-## Important Notes
+## API Reference
 
-- Always submit: Sales Orders, Sales Invoice
-- Do NOT create Payment Entry for COD before delivery
-- Do NOT mark invoice as paid before receiving cash
-- `payment_method` is stored in `Sales Order.po_no` to track COD vs online orders
-- Guest checkout uses mobile number to link orders; stores `checkout_mobile` in `localStorage`
+### Checkout (`api/checkout.py`)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `send_checkout_otp(mobile)` | Guest | Send 6-digit OTP (5-min TTL) |
+| `verify_checkout_otp(mobile, otp)` | Guest | Validate OTP (5-attempt lockout) |
+| `get_customer_addresses(mobile)` | Guest | Return saved addresses |
+| `validate_coupon(coupon_code)` | Guest | Check coupon validity + discount |
+| `place_order(cart_items, address, payment_method, ...)` | Guest | Full order creation |
+| `get_order_status(sales_order)` | Guest | Single order status detail |
+| `update_payment_status(sales_invoice, ...)` | Guest | Update UPI/Card payment status |
+
+### Orders (`api/orders.py`)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `get_my_orders(mobile)` | User | Customer's orders with 5-state status |
+| `get_admin_orders(limit)` | Admin | All orders enriched with COD status |
+| `get_admin_summary()` | Admin | KPI totals for dashboard |
+| `create_delivery_note(sales_order)` | Admin | Create + submit Delivery Note |
+| `mark_order_delivered(sales_order)` | Admin | Mark order as delivered |
+| `collect_cod_payment(sales_invoice)` | Admin | Create + submit Payment Entry |
+| `download_invoice_pdf(sales_order)` | User | Return invoice PDF |
+| `request_return(sales_order, reason, items)` | User | Submit return request |
+| `handle_return(invoice_name, action)` | Admin | Approve/reject return |
+| `cancel_order(sales_order)` | User | Cancel pending order |
+
+### Products (`api/products.py`)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `get_all_products(item_group, limit, offset)` | Guest | Paginated product listing with filters |
+| `get_product(item_code)` | Guest | Full product detail + images + variants |
+| `get_item_variants(item_code)` | Guest | Variant list for a product |
+| `get_item_attributes()` | Admin | All item attributes |
+| `create_item_attribute(attribute_name, values)` | Admin | Create new attribute |
+| `add_attribute_value(attribute_name, value)` | Admin | Add value to attribute |
+| `check_products_setup()` | Admin | Diagnostic: permissions + counts |
+| `seed_all_missing_items()` | Admin | Seed website items from existing items |
+
+> **Note:** Item group create/fetch uses native `frappe.client.insert` / `frappe.client.get_list` directly from the frontend.
+
+---
+
+## Email Notifications (`api/email_notifications.py`)
+
+Triggered on order events. Email resolved via priority chain:
+
+1. `Customer.email_id`
+2. `Contact.email_id` linked to customer
+3. `Contact Email` child table
+4. `User` matched by `mobile_no`
+5. `User` matched by `full_name`
+
+---
+
+## Setup
+
+### Prerequisites
+
+- Frappe bench v15
+- ERPNext v15
+- Node.js 18+ / Yarn
+
+### Install
+
+```bash
+cd frappe-bench
+bench get-app store_customizations <repo-url>
+bench --site <site-name> install-app store_customizations
+```
+
+### Build Frontend
+
+```bash
+cd apps/store_customizations/frontend
+npm install
+npm run build          # Vite build → outputs to ../store_customizations/public/
+cd ../../..
+bench build --app store_customizations   # Links assets to sites/assets/
+```
+
+### Development
+
+```bash
+cd apps/store_customizations/frontend
+npm run dev            # Vite dev server with HMR
+```
+
+Set `VITE_API_BASE_URL` in `.env` to point at your Frappe site (e.g. `http://localhost:8000`).
+
+---
+
+## Key Implementation Notes
+
+- `payment_method` stored in `Sales Order.po_no` to distinguish COD vs online orders
+- COD Sales Invoice kept as **Draft** until `collect_cod_payment` is called; `posting_date` and `due_date` refreshed to today at submit time to avoid ERPNext date validation rejection on stale drafts
+- Guest checkout uses mobile number to resolve/create Customer; `checkout_mobile` persisted in `localStorage`
+- CSRF token fetched from `/api/method/store_customizations.api.customer.get_csrf_token` before mutating requests
+- Wishlist shareable via unique token URL; shared view is read-only
+- Multi-image products store images in `Website Item` child table; primary image synced to `Item.image`
