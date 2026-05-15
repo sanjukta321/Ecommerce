@@ -6,4 +6,7 @@ tags
 node_modules
 __pycache__
 .omc/
+.agents/
+*.log
+
 frappe-bench/

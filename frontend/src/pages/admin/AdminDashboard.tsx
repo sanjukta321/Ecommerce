@@ -114,7 +114,7 @@ export default function AdminDashboard() {
             '/api/resource/Sales%20Order?fields=["grand_total","status","transaction_date","customer_name","name"]&limit=10&order_by=creation desc'
           ),
           fetchJson<{ data: Item[] }>(
-            '/api/resource/Item?fields=["name","item_name","item_group"]&limit=5'
+            '/api/resource/Item?fields=["name","item_name","item_group","standard_rate"]&limit=5&order_by=standard_rate%20desc'
           ),
         ]);
 
@@ -259,9 +259,6 @@ export default function AdminDashboard() {
             <div>
               <p className="admin-section-title">Product Check / System Status</p>
               <p className="admin-section-subtitle">Live diagnostics for product visibility</p>
-            </div>
-            <div className={`admin-badge ${diag.has_item_read_permission ? 'active' : 'inactive'}`}>
-              {diag.has_item_read_permission ? 'API Connection Healthy' : 'API Access Restricted'}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
