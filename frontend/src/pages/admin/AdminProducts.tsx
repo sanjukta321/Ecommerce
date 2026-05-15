@@ -141,7 +141,14 @@ export default function AdminProducts() {
 
   const fetchItemGroups = useCallback(async () => {
     try {
-      const d = await api<{ message: ItemGroup[] }>('/api/method/store_customizations.api.products.get_item_groups');
+      const d = await api<{ message: ItemGroup[] }>(
+        '/api/method/frappe.client.get_list' +
+        '?doctype=Item%20Group' +
+        '&fields=' + encodeURIComponent('["name","parent_item_group","is_group"]') +
+        '&filters=' + encodeURIComponent('[["name","!=","All Item Groups"]]') +
+        '&order_by=name+asc' +
+        '&limit_page_length=0'
+      );
       setItemGroups(d.message || []);
     } catch {}
   }, []);
@@ -206,8 +213,12 @@ export default function AdminProducts() {
     if (!newGroupName.trim()) { setGroupError('Group name is required.'); return; }
     setAddingGroup(true); setGroupError('');
     try {
-      await post('/api/method/store_customizations.api.products.create_item_group', {
-        group_name: newGroupName.trim(), parent_item_group: newGroupParent || 'All Item Groups',
+      await post('/api/method/frappe.client.insert', {
+        doc: {
+          doctype: 'Item Group',
+          item_group_name: newGroupName.trim(),
+          parent_item_group: newGroupParent || 'All Item Groups',
+        },
       });
       await fetchItemGroups();
       setSimpleForm(f => ({ ...f, item_group: newGroupName.trim() }));

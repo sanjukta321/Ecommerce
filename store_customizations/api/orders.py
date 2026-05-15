@@ -302,6 +302,10 @@ def collect_cod_payment(sales_invoice):
     # Submit SI if still Draft (COD orders keep SI as Draft until payment collected)
     # Submitting SI triggers ERPNext to auto-set DN + SO status to "Completed"
     if si.docstatus == 0:
+        # Refresh dates to today — ERPNext rejects due_date < posting_date on submit,
+        # and COD invoices can sit as Draft for days before payment is collected.
+        si.posting_date = frappe.utils.today()
+        si.due_date = frappe.utils.today()
         si.flags.ignore_permissions = True
         si.submit()
         frappe.db.commit()

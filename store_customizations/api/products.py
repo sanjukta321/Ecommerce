@@ -1,5 +1,6 @@
 """store_customizations.api.products — product listing, detail, variant, and attribute endpoints."""
 
+# pyrefly: ignore [missing-import]
 import frappe
 
 
@@ -519,6 +520,8 @@ def add_attribute_value(attribute_name, value):
     return {"success": True}
 
 
+# Superseded: frontend now calls frappe.client.get_list directly.
+# Kept for backward-compatibility; safe to remove in a future cleanup.
 @frappe.whitelist()
 def get_item_groups():
     """Return all non-root item groups for dropdowns."""
@@ -531,6 +534,8 @@ def get_item_groups():
     return groups
 
 
+# Superseded: frontend now calls frappe.client.insert directly.
+# Kept for backward-compatibility; safe to remove in a future cleanup.
 @frappe.whitelist()
 def create_item_group(group_name, parent_item_group="All Item Groups"):
     """Create a new Item Group. Admin only."""
@@ -697,6 +702,7 @@ def check_products_setup():
     roles = frappe.get_roles(user)
 
     # Check Item permissions for current user
+    # pyrefly: ignore [missing-import]
     from frappe.permissions import has_permission
     has_read = has_permission("Item", "read")
 

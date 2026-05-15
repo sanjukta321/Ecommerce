@@ -2,6 +2,7 @@
 
 import secrets
 
+# pyrefly: ignore [missing-import]
 import frappe
 from store_customizations.api._helpers import _get_primary_customer_for_user
 
@@ -349,7 +350,7 @@ def _checkout_create_sales_order(customer, cart_items, address_name=None, coupon
 def _checkout_create_sales_invoice(so, customer, loyalty_points=0):
     """Create a Sales Invoice from the submitted Sales Order."""
     try:
-        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice  # pyrefly: ignore [missing-import]
         si = make_sales_invoice(so.name)
     except Exception:
         company = so.company or frappe.defaults.get_defaults().get("company") or frappe.db.get_value("Company", {}, "name")
@@ -413,7 +414,7 @@ def _checkout_create_payment_entry(si, payment_method):
     mode_of_payment = _get_mode_of_payment(payment_method)
 
     try:
-        from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+        from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry  # pyrefly: ignore [missing-import]
         pe = get_payment_entry("Sales Invoice", si.name)
     except Exception:
         # Minimal manual payment entry

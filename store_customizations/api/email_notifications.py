@@ -19,7 +19,8 @@ def _get_order_email_context(so_name):
     customer = so.customer or ""
     customer_name = so.customer_name or customer
 
-    # Resolve recipient email: Customer.email_id → Contact → User (mobile match)
+    # Resolve recipient email: Customer.email_id → Contact.email_id → Contact Email child
+    # → User (mobile match) → User (full_name match)
     email = frappe.db.get_value("Customer", customer, "email_id") or ""
 
     if not email:
@@ -30,11 +31,16 @@ def _get_order_email_context(so_name):
         )
         if contact_link:
             email = frappe.db.get_value("Contact", contact_link, "email_id") or ""
+            if not email:
+                email = frappe.db.get_value("Contact Email", {"parent": contact_link}, "email_id") or ""
 
     if not email:
         mobile = frappe.db.get_value("Customer", customer, "mobile_no") or ""
         if mobile:
             email = frappe.db.get_value("User", {"mobile_no": mobile}, "email") or ""
+
+    if not email:
+        email = frappe.db.get_value("User", {"full_name": customer_name}, "email") or ""
 
     if not email:
         return None  # No email found — skip silently
