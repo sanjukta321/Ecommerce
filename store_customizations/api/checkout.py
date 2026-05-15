@@ -175,10 +175,9 @@ def place_order(cart_items, address, payment_method, mobile=None, saved_address_
     frappe.db.commit()
 
     # 3. Sales Invoice from submitted SO
-    # COD: keep SI as Draft — submitting it would auto-mark SO+DN as "Completed"
-    #      via ERPNext's billing status propagation, before payment is collected.
-    #      SI is submitted later in collect_cod_payment.
-    # Online: submit immediately so payment entry can be created against it.
+    # COD: keep Draft → SO stays "To Deliver And Bill"; displayed as "Unpaid" in portal.
+    #      SI submitted later in collect_cod_payment when payment is actually collected.
+    # Online: submit immediately so payment entry can be linked against it.
     si = _checkout_create_sales_invoice(so, customer, loyalty_points=int(loyalty_points or 0))
     frappe.db.commit()          # lock SI name before submit
     if payment_method != "cod":

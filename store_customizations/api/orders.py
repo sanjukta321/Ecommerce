@@ -1,7 +1,11 @@
 """store_customizations.api.orders — order retrieval, delivery, returns, and admin order management."""
 
+
+# pyrefly: ignore [missing-import]
 import frappe
 from store_customizations.api._helpers import _get_all_customer_names_for_user
+
+
 
 
 def _decode_po_no(po_no):
@@ -17,11 +21,27 @@ def _order_ecom_status(so_name, so_status, docstatus=1):
     Flow: Pending → Confirmed → On the Way (shipped) → Delivered (paid) → Cancelled
     """
     if docstatus == 2 or so_status == "Cancelled":
+        # Fetch cancelled SI + DN (docstatus=2) so admin can see them (cancelled, not deleted)
+        cancelled_si = frappe.db.sql("""
+            SELECT sii.parent FROM `tabSales Invoice Item` sii
+            JOIN `tabSales Invoice` si ON si.name = sii.parent
+            WHERE sii.sales_order = %s AND si.docstatus = 2 AND COALESCE(si.is_return, 0) = 0
+            ORDER BY si.creation DESC LIMIT 1
+        """, so_name, as_list=True)
+        cancelled_dn = frappe.db.sql("""
+            SELECT dni.parent FROM `tabDelivery Note Item` dni
+            JOIN `tabDelivery Note` dn ON dn.name = dni.parent
+            WHERE dni.against_sales_order = %s AND dn.docstatus = 2
+            ORDER BY dn.creation DESC LIMIT 1
+        """, so_name, as_list=True)
         return {
             "ecom_status":          "Cancelled",
             "payment_status":       "Unpaid",
-            "sales_invoice":        None,
-            "delivery_note":        None,
+            "sales_invoice":        cancelled_si[0][0] if cancelled_si else None,
+            "si_status":            "Cancelled" if cancelled_si else None,
+            "return_invoice":       None,
+            "delivery_note":        cancelled_dn[0][0] if cancelled_dn else None,
+            "dn_status":            "Cancelled" if cancelled_dn else None,
             "actual_delivery_date": None,
         }
 
@@ -52,7 +72,8 @@ def _order_ecom_status(so_name, so_status, docstatus=1):
             "Sales Invoice", si_name, ["outstanding_amount", "docstatus", "status"], as_dict=True
         )
         if si_data:
-            si_status = si_data.status
+            # Draft SI = COD awaiting payment; display as "Unpaid" not "Draft"
+            si_status = "Unpaid" if si_data.docstatus == 0 else si_data.status
             if si_data.docstatus == 1 and (si_data.outstanding_amount or 0) <= 0:
                 payment_status = "Paid"
 
@@ -69,12 +90,12 @@ def _order_ecom_status(so_name, so_status, docstatus=1):
     # SO "Completed" = fully billed + delivered; for COD this only happens after payment collected
     if return_si_name:
         ecom_status = "Credit Note Issued"
-    elif payment_status == "Paid" or so_status == "Completed":
+    elif so_status == "Completed" or (payment_status == "Paid" and dn_name and dn_status in ("To Bill", "Completed")):
         ecom_status = "Delivered"
     elif dn_name:
         ecom_status = "On the Way"
     elif so_status in ("To Deliver and Bill", "To Bill", "To Deliver"):
-        ecom_status = "Confirmed"
+        ecom_status = "Pending"
     else:
         ecom_status = "Pending"
 
@@ -177,16 +198,16 @@ def get_admin_orders(limit=100):
 
     orders = frappe.get_list(
         "Sales Order",
-        filters={"docstatus": ["!=", 2]},
+        filters={"docstatus": ["in", [1, 2]]},
         fields=["name", "customer", "customer_name", "grand_total", "status",
-                "transaction_date", "delivery_date", "po_no"],
+                "transaction_date", "delivery_date", "po_no", "docstatus"],
         order_by="transaction_date desc",
         limit=int(limit),
     )
 
     for order in orders:
         order["payment_method"] = _decode_po_no(order.pop("po_no"))
-        order.update(_order_ecom_status(order["name"], order["status"]))
+        order.update(_order_ecom_status(order["name"], order["status"], order.get("docstatus", 1)))
         order["has_return"] = bool(order.get("return_invoice"))
 
     return orders
@@ -209,6 +230,7 @@ def create_delivery_note(sales_order):
     company = so.company or frappe.defaults.get_defaults().get("company") or frappe.db.get_value("Company", {}, "name")
 
     try:
+        # pyrefly: ignore [missing-import]
         from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
         dn = make_delivery_note(sales_order)
     except Exception:
@@ -299,11 +321,9 @@ def collect_cod_payment(sales_invoice):
 
     si = frappe.get_doc("Sales Invoice", sales_invoice)
 
-    # Submit SI if still Draft (COD orders keep SI as Draft until payment collected)
-    # Submitting SI triggers ERPNext to auto-set DN + SO status to "Completed"
+    # SI is always submitted at checkout now (COD + online alike).
+    # Guard kept for legacy orders that may still have draft SI.
     if si.docstatus == 0:
-        # Refresh dates to today — ERPNext rejects due_date < posting_date on submit,
-        # and COD invoices can sit as Draft for days before payment is collected.
         si.posting_date = frappe.utils.today()
         si.due_date = frappe.utils.today()
         si.flags.ignore_permissions = True
@@ -372,6 +392,7 @@ def download_invoice_pdf(sales_order):
     finally:
         frappe.set_user(saved_user)
 
+    # pyrefly: ignore [missing-import]
     from frappe.utils.pdf import get_pdf
     pdf_content = get_pdf(html)
 
@@ -545,8 +566,23 @@ def cancel_order(sales_order):
     so = frappe.get_doc("Sales Order", sales_order)
 
     ecom = _order_ecom_status(sales_order, so.status)
-    if ecom["ecom_status"] != "Pending":
-        frappe.throw("Only Pending orders can be cancelled")
+    if ecom["ecom_status"] in ("Delivered", "Cancelled", "Credit Note Issued"):
+        frappe.throw("Cannot cancel a delivered or already cancelled order")
+
+    # Cancel Delivery Note first (blocks SO cancel if linked)
+    dn_name = frappe.db.get_value("Delivery Note Item", {"against_sales_order": sales_order}, "parent")
+    if dn_name:
+        dn = frappe.get_doc("Delivery Note", dn_name)
+        dn.flags.ignore_permissions = True
+        if dn.docstatus == 0:
+            # Submit draft DN first so it can be properly cancelled (Draft → Submit → Cancel)
+            dn.submit()
+            frappe.db.commit()
+            dn.reload()
+            dn.flags.ignore_permissions = True
+        if dn.docstatus == 1:
+            dn.cancel()
+        frappe.db.commit()
 
     si_name = frappe.db.get_value(
         "Sales Invoice Item", {"sales_order": sales_order}, "parent"
@@ -554,12 +590,18 @@ def cancel_order(sales_order):
     if si_name:
         si = frappe.get_doc("Sales Invoice", si_name)
         si.flags.ignore_permissions = True
+        if si.docstatus == 0:
+            # Submit draft SI first so it can be properly cancelled (Draft → Submit → Cancel)
+            # COD invoices stay as Draft until payment; submit here so cancel is clean
+            si.submit()
+            frappe.db.commit()
+            si.reload()
+            si.flags.ignore_permissions = True
         if si.docstatus == 1:
             si.cancel()
-        elif si.docstatus == 0:
-            frappe.delete_doc("Sales Invoice", si_name, ignore_permissions=True)
         frappe.db.commit()
 
+    so.reload()
     so.flags.ignore_permissions = True
     so.cancel()
     frappe.db.commit()

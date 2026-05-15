@@ -88,7 +88,7 @@ function daysSince(dateStr?: string): number {
 function canRequestReturn(order: Order): boolean {
     const ecom = order.ecom_status;
     if (ecom === 'Credit Note Issued' || ecom === 'Cancelled') return false;
-    if (ecom !== 'Delivered' && ecom !== 'On the Way') return false;
+    if (ecom !== 'Delivered') return false;
     if (order.actual_delivery_date) return daysSince(order.actual_delivery_date) <= 7;
     return true;
 }
@@ -402,7 +402,7 @@ const Orders: React.FC = () => {
                                     Download Invoice
                                 </a>
                             )}
-                            {ecom === 'Pending' && (
+                            {!['Delivered', 'Cancelled', 'Credit Note Issued'].includes(ecom) && (
                                 <button
                                     className="order-action-btn cancel-btn"
                                     disabled={actionLoading[o.name]}
@@ -431,7 +431,7 @@ const Orders: React.FC = () => {
                                     Request Return
                                 </button>
                             )}
-                            {!returnAllowed && (ecom === 'Delivered' || ecom === 'On the Way') && (
+                            {!returnAllowed && ecom === 'Delivered' && (
                                 <span style={{ fontSize: 11, color: '#9ca3af' }}>Return window expired</span>
                             )}
                             {actionMsg[o.name] && (

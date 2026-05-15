@@ -507,7 +507,7 @@ function OrderCard({ order, onShip, onCollect, onView, isShipping, isPaying }: {
 }) {
   const ecom = order.ecom_status || 'Pending';
   const isCOD = (order.payment_method || '').toLowerCase() === 'cod';
-  const canShip = !order.delivery_note && ecom === 'Confirmed';
+  const canShip = !order.delivery_note && (ecom === 'Pending' || ecom === 'Confirmed');
   const canCollect = isCOD && ecom === 'On the Way' && order.payment_status !== 'Paid';
   const needsAction = canShip || canCollect;
 
