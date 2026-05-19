@@ -1,6 +1,6 @@
 # SB Store — Project Reference
 
-> App: `store_customizations` | Company: TechBird IT, Pune | Last updated: 2026-05-14
+> App: `store_customizations` | Company: TechBird IT, Pune | Last updated: 2026-05-19
 
 ---
 
@@ -139,16 +139,20 @@ Email recipient resolved by cascade: `Customer.email_id` → `Contact.email_id` 
 
 ### Live / Working
 - Product catalog: browse, search, filter by category, item group tree
-- Product variants (colour/size with attribute matrix)
-- Multi-image product gallery with overlay wishlist/share buttons
+- Product variants (colour/size with attribute matrix); size values are dynamic from Frappe Item Attribute (full names: Small/Medium/Large — no frontend translation layer)
+- Multi-image product gallery with overlay wishlist/share buttons; auto-rotate carousel with keyboard navigation
+- Product detail: skeleton shimmer loading screen (replaces plain text spinner)
 - Cart (React context, in-memory)
 - Checkout: COD + guest OTP flow, saved addresses, coupon codes
+- Checkout: mobile number auto-filled from logged-in user profile (`auth.get_current_user_profile`)
+- Checkout: visible `<label>` on all address fields, correct input types (`type="tel"` for phone/pincode, `autoComplete` attributes), OTP has `autocomplete="one-time-code"`
 - Loyalty points redemption at checkout
+- Dark / light mode theme toggle (CSS variable theming, stored in `localStorage`, applied via `data-theme`)
 - Order tracking (5 states: Pending → Confirmed → On the Way → Delivered → Cancelled)
 - Order cancellation (Pending orders only)
 - Returns: customer initiates → admin approves/rejects → credit note
 - Invoice PDF download
-- Wishlist (context + `frappe.client` for logged-in users)
+- Wishlist (context + `frappe.client` for logged-in users); shareable via URL
 - Product reviews (star rating, title, body)
 - Gift cards: buy, send by email, redeem at checkout
 - Saved UPI / card metadata
@@ -158,6 +162,10 @@ Email recipient resolved by cascade: `Customer.email_id` → `Contact.email_id` 
 - Share modal: Copy Link, WhatsApp, Gmail, native share API
 - Stock alerts (low-stock doctype hook on Stock Entry)
 - Transactional emails (4 order events)
+- Accessibility: `aria-live="polite"` on toast container, `aria-label` on star ratings, `role="img"` on rating elements, `prefers-reduced-motion` support (all animations disabled)
+- Touch UX: 44px minimum touch targets on size/colour buttons, `touch-action: manipulation` on all interactive controls
+- Responsive: 640px container padding breakpoint (16px on mobile vs 40px desktop)
+- z-index scale: CSS tokens `--z-navbar / --z-dropdown / --z-modal / --z-toast`
 
 ### In Progress / Partial
 - GST tax calculation — **plan ready, not implemented**
@@ -179,6 +187,7 @@ Email recipient resolved by cascade: `Customer.email_id` → `Contact.email_id` 
 ### Medium Priority
 | Feature | Notes |
 |---|---|
+| **Out-of-stock badge on product card** | `ProductCard` accepts `actual_qty` prop; renders "Sold Out" overlay when `actual_qty <= 0`. Backend `get_all_products` does not yet return `actual_qty` — needs field added to API to activate badge. |
 | **Related Products** | "You may also like" on product detail. Based on same item group or manually curated. |
 | **Product Q&A** | Customer questions answered by seller/admin. New custom doctype needed. |
 | **Shipping Integration** | Shiprocket/Delhivery API for AWB, tracking number on Delivery Note, auto-status updates. |
@@ -188,7 +197,6 @@ Email recipient resolved by cascade: `Customer.email_id` → `Contact.email_id` 
 ### Low Priority / Future
 | Feature | Notes |
 |---|---|
-| **Dark Mode** | CSS variable theming, toggle in Profile. |
 | **Customer Analytics Dashboard** | Purchase history, spend trends, favourite categories. |
 | **Product Comparison** | Side-by-side attribute/price compare. |
 | **Seller Payout Automation** | Scheduled task: calculate seller dues, create payout record. |
