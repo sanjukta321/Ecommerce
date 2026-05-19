@@ -16,10 +16,11 @@ interface ProductCardProps {
     category?: string;
     has_variants?: boolean;
     variant_count?: number;
+    actual_qty?: number;
 }
 
 
-const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, images, rating = 4.5, category, has_variants, variant_count }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, images, rating = 4.5, category, has_variants, variant_count, actual_qty }) => {
     const navigate = useNavigate();
     const { addToCart } = useCart();
     const { toggleWishlist, isWishlisted } = useWishlist();
@@ -121,6 +122,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, image
                                 {has_variants ? 'Select Options' : 'Quick Add'}
                             </button>
                         </div>
+                        {actual_qty !== undefined && actual_qty <= 0 && (
+                            <span className="sold-out-badge">Sold Out</span>
+                        )}
                         {has_variants && variant_count && variant_count > 0 && (
                             <span className="variant-badge">{variant_count} variants</span>
                         )}
@@ -128,7 +132,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, image
                     </div>
                     <div className="product-info">
                         <h3>{name}</h3>
-                        <div className="rating">
+                        <div className="rating" aria-label={`${rating} out of 5 stars`} role="img">
                             {'★'.repeat(Math.floor(rating))}{'☆'.repeat(5 - Math.floor(rating))}
                             <span>({rating})</span>
                         </div>

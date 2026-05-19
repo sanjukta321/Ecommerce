@@ -148,7 +148,7 @@ const ProductDetail: React.FC = () => {
     const { addToCart } = useCart();
     const { toggleWishlist, isWishlisted } = useWishlist();
     const { showToast } = useToast();
-    const [selectedSize, setSelectedSize] = useState('M');
+    const [selectedSize, setSelectedSize] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [activeImage, setActiveImage] = useState(0);
     const [showSizeChart, setShowSizeChart] = useState(false);
@@ -297,6 +297,7 @@ const ProductDetail: React.FC = () => {
 
     const colours: string[] = variantData?.attributes.find(a => a.attribute === colourAttrName)?.values ?? [];
 
+
     // Resolved display image and price
     const displayImage = (() => {
         if (activeVariant?.image) {
@@ -328,6 +329,18 @@ const ProductDetail: React.FC = () => {
         return () => clearInterval(timer);
     }, [galleryImages, isHoveringGallery]);
 
+    useEffect(() => {
+        if (galleryImages.length <= 1) return;
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft')
+                setActiveImage(i => (i - 1 + galleryImages.length) % galleryImages.length);
+            else if (e.key === 'ArrowRight')
+                setActiveImage(i => (i + 1) % galleryImages.length);
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [galleryImages]);
+
     const displayPrice = activeVariant
         ? `₹${Number(activeVariant.price).toLocaleString('en-IN')}`
         : product?.price ?? '';
@@ -338,8 +351,17 @@ const ProductDetail: React.FC = () => {
     if (loading) {
         return (
             <div className="product-detail-page">
-                <div className="detail-container container" style={{ padding: '100px 0', textAlign: 'center' }}>
-                    <p style={{ color: '#6b7280', fontSize: 16 }}>Loading product…</p>
+                <div className="detail-container container">
+                    <div className="product-skeleton">
+                        <div className="skeleton-image" />
+                        <div className="skeleton-info">
+                            <div className="skeleton-line skeleton-title" />
+                            <div className="skeleton-line skeleton-subtitle" />
+                            <div className="skeleton-line skeleton-price" />
+                            <div className="skeleton-line skeleton-short" />
+                            <div className="skeleton-line skeleton-short" />
+                        </div>
+                    </div>
                 </div>
                 <Footer />
             </div>
@@ -455,7 +477,7 @@ const ProductDetail: React.FC = () => {
                         <p className="product-short-description">{product.description}</p>
 
                         <div className="rating-section">
-                            <div className="stars">
+                            <div className="stars" aria-label={reviewCount > 0 ? `${avgRating.toFixed(1)} out of 5 stars` : 'No ratings yet'} role="img">
                                 {reviewCount > 0
                                     ? ('★'.repeat(Math.round(avgRating)) + '☆'.repeat(5 - Math.round(avgRating)))
                                     : '☆☆☆☆☆'}
@@ -474,9 +496,9 @@ const ProductDetail: React.FC = () => {
                         <div className="offers-section glass-effect">
                             <h3>Available Offers</h3>
                             <ul>
-                                <li>🎁 10% instant discount on HDFC Bank cards</li>
-                                <li>💳 No cost EMI available on orders above ₹3000</li>
-                                <li>🚚 Free delivery on orders above ₹500</li>
+                                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{verticalAlign:'middle',marginRight:6}}><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>10% instant discount on HDFC Bank cards</li>
+                                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{verticalAlign:'middle',marginRight:6}}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>No cost EMI available on orders above ₹3000</li>
+                                <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{verticalAlign:'middle',marginRight:6}}><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Free delivery on orders above ₹500</li>
                             </ul>
                         </div>
 
@@ -547,7 +569,7 @@ const ProductDetail: React.FC = () => {
                                     <div className="size-options">
                                         {(product.category === 'Furniture'
                                             ? (product.tags?.some(t => t.toLowerCase().includes('bed')) ? ['Queen', 'King'] : ['Standard', 'Large', 'Compact'])
-                                            : (product.tags?.some(t => t.toLowerCase().includes('shoe')) ? ['6', '7', '8', '9', '10'] : ['XS', 'S', 'M', 'L', 'XL', 'XXL'])
+                                            : (product.tags?.some(t => t.toLowerCase().includes('shoe')) ? ['6', '7', '8', '9', '10'] : ['XS', 'Small', 'Medium', 'Large', 'XL', 'XXL'])
                                         ).map(size => (
                                             <button
                                                 key={size}
@@ -745,11 +767,11 @@ const ProductDetail: React.FC = () => {
                                     <table className="size-table-premium">
                                         <thead><tr><th>Size</th><th>Bust</th><th>Waist</th><th>Hip</th></tr></thead>
                                         <tbody>
-                                            <tr><td>XS</td><td>32-34"</td><td>26-28"</td><td>34-36"</td></tr>
-                                            <tr><td>S</td><td>34-36"</td><td>28-30"</td><td>36-38"</td></tr>
-                                            <tr><td>M</td><td>36-38"</td><td>30-32"</td><td>38-40"</td></tr>
-                                            <tr><td>L</td><td>38-40"</td><td>32-34"</td><td>40-42"</td></tr>
-                                            <tr><td>XL</td><td>40-42"</td><td>34-36"</td><td>42-44"</td></tr>
+                                            <tr><td>Extra Small</td><td>32-34"</td><td>26-28"</td><td>34-36"</td></tr>
+                                            <tr><td>Small</td><td>34-36"</td><td>28-30"</td><td>36-38"</td></tr>
+                                            <tr><td>Medium</td><td>36-38"</td><td>30-32"</td><td>38-40"</td></tr>
+                                            <tr><td>Large</td><td>38-40"</td><td>32-34"</td><td>40-42"</td></tr>
+                                            <tr><td>Extra Large</td><td>40-42"</td><td>34-36"</td><td>42-44"</td></tr>
                                         </tbody>
                                     </table>
                                 )}

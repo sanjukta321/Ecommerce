@@ -1,3 +1,45 @@
+/* Skeleton loading */
+.product-skeleton {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    padding: 60px 0;
+}
+.skeleton-image {
+    height: 500px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--primary-light) 25%, var(--hover-bg) 50%, var(--primary-light) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+}
+.skeleton-info {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 24px;
+}
+.skeleton-line {
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--primary-light) 25%, var(--hover-bg) 50%, var(--primary-light) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+}
+.skeleton-title { height: 36px; width: 80%; }
+.skeleton-subtitle { height: 18px; width: 50%; }
+.skeleton-price { height: 28px; width: 35%; margin-top: 8px; }
+.skeleton-short { height: 16px; width: 65%; }
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-image, .skeleton-line { animation: none; }
+}
+@media (max-width: 768px) {
+    .product-skeleton { grid-template-columns: 1fr; }
+    .skeleton-image { height: 300px; }
+}
+
 .product-detail-page {
     min-height: 100vh;
     padding-top: 100px;
@@ -214,8 +256,9 @@
 }
 
 .size-btn {
-    width: 50px;
-    height: 50px;
+    min-width: 50px;
+    height: 44px;
+    padding: 0 12px;
     border: 1px solid var(--glass-border);
     background: transparent;
     color: var(--text-main);
@@ -223,6 +266,8 @@
     cursor: pointer;
     transition: var(--transition);
     font-weight: 600;
+    touch-action: manipulation;
+    white-space: nowrap;
 }
 
 .size-btn:hover,
@@ -262,13 +307,14 @@
 }
 
 .colour-swatch {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     border: 2px solid var(--glass-border);
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
     padding: 0;
+    touch-action: manipulation;
 }
 
 .colour-swatch:hover {

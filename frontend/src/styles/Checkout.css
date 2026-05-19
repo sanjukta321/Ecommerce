@@ -168,6 +168,22 @@
     margin-bottom: 30px;
 }
 
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-field.full-width {
+    grid-column: span 2;
+}
+
+.form-field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
 .form-grid input {
     padding: 12px 15px;
     border-radius: 6px;
@@ -175,6 +191,9 @@
     border: 1px solid var(--input-border);
     color: var(--text-main);
     outline: none;
+    font-size: 15px;
+    min-height: 44px;
+    touch-action: manipulation;
 }
 
 .form-grid input::placeholder {

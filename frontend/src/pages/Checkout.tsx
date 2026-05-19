@@ -79,6 +79,20 @@ const Checkout: React.FC = () => {
     const [orderId, setOrderId] = useState('');
     const [invoiceId, setInvoiceId] = useState('');
 
+    // Pre-fill mobile from logged-in user profile
+    useEffect(() => {
+        fetch(`${BASE}/api/method/store_customizations.api.auth.get_current_user_profile`, {
+            credentials: 'include',
+            headers: { 'X-Frappe-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 'fetch' },
+        })
+            .then(r => r.json())
+            .then(d => {
+                const num = (d.message?.mobile_no || '').replace(/\D/g, '').slice(-10);
+                if (num.length === 10) setMobile(num);
+            })
+            .catch(() => {});
+    }, []);
+
     useEffect(() => {
         if (step !== 'payment') return;
         fetch(`${BASE}/api/method/store_customizations.api.customer.get_loyalty_balance`, {
@@ -323,6 +337,8 @@ const Checkout: React.FC = () => {
                                     <span className="prefix">+91</span>
                                     <input
                                         type="tel"
+                                        name="tel"
+                                        autoComplete="tel-national"
                                         placeholder="Mobile Number"
                                         maxLength={10}
                                         value={mobile}
@@ -347,12 +363,13 @@ const Checkout: React.FC = () => {
                                     <div className="otp-section fade-in">
                                         <p>Enter 6-digit OTP sent to +91 {mobile}</p>
                                         <input
-                                            type="text"
-                                            placeholder="XXXXXX"
+                                            type="tel"
+                                            placeholder="6-digit OTP"
                                             maxLength={6}
                                             value={otp}
                                             onChange={e => { setOtp(e.target.value.replace(/\D/g, '')); setOtpError(''); }}
                                             inputMode="numeric"
+                                            autoComplete="one-time-code"
                                         />
                                         <button className="premium-btn verify-btn" onClick={handleVerifyOtp} disabled={otpVerifying}>
                                             {otpVerifying ? 'Verifying…' : 'Verify OTP'}
@@ -382,7 +399,7 @@ const Checkout: React.FC = () => {
                                             <div className="selected-address-name">
                                                 {selectedSavedAddress.address_title}
                                                 <span className="address-type-tag">
-                                                    {selectedSavedAddress.address_type === 'Home' ? '🏠' : selectedSavedAddress.address_type === 'Work' ? '🏢' : '📍'} {selectedSavedAddress.address_type || 'Home'}
+                                                    {selectedSavedAddress.address_type || 'Home'}
                                                 </span>
                                                 <span className="address-badge">Selected</span>
                                             </div>
@@ -411,17 +428,35 @@ const Checkout: React.FC = () => {
                                                     className={`addr-type-btn${address.address_type === type ? ' active' : ''}`}
                                                     onClick={() => setAddress(a => ({ ...a, address_type: type }))}
                                                 >
-                                                    {type === 'Home' ? '🏠' : type === 'Work' ? '🏢' : '📍'} {type}
+                                                    {type}
                                                 </button>
                                             ))}
                                         </div>
                                         <div className="form-grid">
-                                            <input type="text" placeholder="Full Name (Required)*" required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} />
-                                            <input type="text" placeholder="Pincode (Required)*" required value={address.pincode} onChange={e => setAddress({ ...address, pincode: e.target.value })} />
-                                            <input type="text" placeholder="Address (House No, Building, Street, Area)*" className="full-width" required value={address.addressLine} onChange={e => setAddress({ ...address, addressLine: e.target.value })} />
-                                            <input type="text" placeholder="City/District*" required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} />
-                                            <input type="text" placeholder="State*" required value={address.state} onChange={e => setAddress({ ...address, state: e.target.value })} />
-                                            <input type="text" placeholder="Landmark (Optional)" className="full-width" value={address.landmark} onChange={e => setAddress({ ...address, landmark: e.target.value })} />
+                                            <div className="form-field">
+                                                <label htmlFor="addr-name">Full Name *</label>
+                                                <input id="addr-name" type="text" autoComplete="name" placeholder="Full Name" required value={address.fullName} onChange={e => setAddress({ ...address, fullName: e.target.value })} />
+                                            </div>
+                                            <div className="form-field">
+                                                <label htmlFor="addr-pincode">Pincode *</label>
+                                                <input id="addr-pincode" type="tel" inputMode="numeric" autoComplete="postal-code" placeholder="6-digit pincode" required value={address.pincode} onChange={e => setAddress({ ...address, pincode: e.target.value })} />
+                                            </div>
+                                            <div className="form-field full-width">
+                                                <label htmlFor="addr-line">Address *</label>
+                                                <input id="addr-line" type="text" autoComplete="address-line1" placeholder="House No, Building, Street, Area" className="full-width" required value={address.addressLine} onChange={e => setAddress({ ...address, addressLine: e.target.value })} />
+                                            </div>
+                                            <div className="form-field">
+                                                <label htmlFor="addr-city">City / District *</label>
+                                                <input id="addr-city" type="text" autoComplete="address-level2" placeholder="City/District" required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} />
+                                            </div>
+                                            <div className="form-field">
+                                                <label htmlFor="addr-state">State *</label>
+                                                <input id="addr-state" type="text" autoComplete="address-level1" placeholder="State" required value={address.state} onChange={e => setAddress({ ...address, state: e.target.value })} />
+                                            </div>
+                                            <div className="form-field full-width">
+                                                <label htmlFor="addr-landmark">Landmark (Optional)</label>
+                                                <input id="addr-landmark" type="text" placeholder="Nearby landmark" className="full-width" value={address.landmark} onChange={e => setAddress({ ...address, landmark: e.target.value })} />
+                                            </div>
                                         </div>
                                         {showNewAddressForm && savedAddresses.length > 0 && (
                                             <button
