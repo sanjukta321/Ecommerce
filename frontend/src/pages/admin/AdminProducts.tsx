@@ -141,22 +141,35 @@ export default function AdminProducts() {
 
   const fetchItemGroups = useCallback(async () => {
     try {
-      const d = await api<{ message: ItemGroup[] }>(
-        '/api/method/frappe.client.get_list' +
-        '?doctype=Item%20Group' +
-        '&fields=' + encodeURIComponent('["name","parent_item_group","is_group"]') +
+      const res = await fetch(
+        `${BASE}/api/resource/Item Group` +
+        '?fields=' + encodeURIComponent('["name","parent_item_group","is_group"]') +
         '&filters=' + encodeURIComponent('[["name","!=","All Item Groups"]]') +
-        '&order_by=name+asc' +
-        '&limit_page_length=0'
+        '&order_by=name asc' +
+        '&limit_page_length=0',
+        { credentials: 'include' }
       );
-      setItemGroups(d.message || []);
+      const d: { data: ItemGroup[] } = await res.json();
+      setItemGroups(d.data || []);
     } catch {}
   }, []);
 
   const fetchAttrs = useCallback(async () => {
     try {
-      const d = await api<{ message: AttrDef[] }>('/api/method/store_customizations.api.products.get_item_attributes');
-      setAllAttrs(d.message || []);
+      const res = await fetch(
+        `${BASE}/api/resource/Item Attribute Value` +
+        '?fields=' + encodeURIComponent('["parent","attribute_value"]') +
+        '&order_by=parent asc, idx asc' +
+        '&limit_page_length=1000',
+        { credentials: 'include' }
+      );
+      const d: { data: Array<{ parent: string; attribute_value: string }> } = await res.json();
+      const grouped: Record<string, string[]> = {};
+      for (const row of (d.data || [])) {
+        if (!grouped[row.parent]) grouped[row.parent] = [];
+        grouped[row.parent].push(row.attribute_value);
+      }
+      setAllAttrs(Object.entries(grouped).map(([name, values]) => ({ name, values })));
     } catch {}
   }, []);
 

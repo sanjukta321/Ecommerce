@@ -1,5 +1,6 @@
 """store_customizations.api.admin — admin product management, stock, site config, and seller portal."""
 
+# pyrefly: ignore [missing-import]
 import frappe
 
 
@@ -701,6 +702,9 @@ def get_template_product(item_code):
 @frappe.whitelist()
 def get_seller_inventory():
     """Return all items enriched with Bin stock data for the seller inventory page."""
+    roles = frappe.get_roles()
+    if "Supplier" not in roles and "System Manager" not in roles:
+        frappe.throw("Not permitted", frappe.PermissionError)
     items = frappe.get_all(
         "Item",
         filters={"has_variants": 0},

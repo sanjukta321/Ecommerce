@@ -450,21 +450,6 @@ def get_item_variants(item_code):
     return {"attributes": all_attrs, "variants": result}
 
 
-@frappe.whitelist()
-def get_item_attributes():
-    """Return all Item Attributes with their allowed values."""
-    attrs = frappe.get_all("Item Attribute", fields=["name"], order_by="name asc")
-    result = []
-    for a in attrs:
-        values = frappe.get_all(
-            "Item Attribute Value",
-            filters={"parent": a["name"]},
-            fields=["attribute_value", "abbr"],
-            order_by="idx asc",
-        )
-        result.append({"name": a["name"], "values": [v["attribute_value"] for v in values]})
-    return result
-
 
 @frappe.whitelist()
 def create_item_attribute(attribute_name, values):
@@ -519,41 +504,6 @@ def add_attribute_value(attribute_name, value):
     frappe.db.commit()
     return {"success": True}
 
-
-# Superseded: frontend now calls frappe.client.get_list directly.
-# Kept for backward-compatibility; safe to remove in a future cleanup.
-@frappe.whitelist()
-def get_item_groups():
-    """Return all non-root item groups for dropdowns."""
-    groups = frappe.get_all(
-        "Item Group",
-        filters={"name": ["!=", "All Item Groups"]},
-        fields=["name", "parent_item_group", "is_group"],
-        order_by="name asc",
-    )
-    return groups
-
-
-# Superseded: frontend now calls frappe.client.insert directly.
-# Kept for backward-compatibility; safe to remove in a future cleanup.
-@frappe.whitelist()
-def create_item_group(group_name, parent_item_group="All Item Groups"):
-    """Create a new Item Group. Admin only."""
-    if "System Manager" not in frappe.get_roles():
-        frappe.throw("Not permitted", frappe.PermissionError)
-    group_name = (group_name or "").strip()
-    if not group_name:
-        frappe.throw("Group name is required")
-    if frappe.db.exists("Item Group", group_name):
-        frappe.throw(f"Item Group '{group_name}' already exists")
-    if not frappe.db.exists("Item Group", parent_item_group):
-        parent_item_group = "All Item Groups"
-    doc = frappe.new_doc("Item Group")
-    doc.item_group_name = group_name
-    doc.parent_item_group = parent_item_group
-    doc.insert(ignore_permissions=True)
-    frappe.db.commit()
-    return {"name": doc.name}
 
 
 @frappe.whitelist()
