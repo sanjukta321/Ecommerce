@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import Footer from '../components/Footer';
 import '../styles/Cart.css';
 
@@ -9,6 +10,14 @@ const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const Cart: React.FC = () => {
     const navigate = useNavigate();
     const { cart, removeFromCart, updateQuantity, clearCart, cartTotal } = useCart();
+    const { addToWishlist, isWishlisted } = useWishlist();
+
+    const totalQty = cart.reduce((a, i) => a + i.quantity, 0);
+
+    const handleMoveToWishlist = (item: typeof cart[0]) => {
+        addToWishlist({ id: item.id, name: item.name, price: item.price, image: item.image });
+        removeFromCart(item.id, item.size);
+    };
 
     const [couponInput, setCouponInput] = useState('');
     const [couponLoading, setCouponLoading] = useState(false);
@@ -78,7 +87,7 @@ const Cart: React.FC = () => {
         <div className="cart-page">
             <div className="container cart-container">
                 <div className="cart-header fade-in">
-                    <h1>Shopping Cart <span>({cart.length} {cart.length === 1 ? 'item' : 'items'})</span></h1>
+                    <h1>Shopping Cart <span>({totalQty} {totalQty === 1 ? 'item' : 'items'})</span></h1>
                     <button className="clear-cart-btn" onClick={clearCart}>Clear All</button>
                 </div>
 
@@ -87,13 +96,27 @@ const Cart: React.FC = () => {
                     <div className="cart-items">
                         {cart.map((item) => (
                             <div key={`${item.id}-${item.size}`} className="cart-item glass-effect">
-                                <div className="item-image">
+                                <div
+                                    className="item-image"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => navigate(`/product/${item.id}`)}
+                                >
                                     <img src={item.image} alt={item.name} />
                                 </div>
                                 <div className="item-details">
-                                    <h3>{item.name}</h3>
+                                    <h3
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => navigate(`/product/${item.id}`)}
+                                    >{item.name}</h3>
                                     <p className="item-size">Size: <span>{item.size}</span></p>
                                     <p className="item-price">₹{item.price.toLocaleString('en-IN')}</p>
+                                    <button
+                                        className={`save-for-later-btn${isWishlisted(item.id) ? ' wishlisted' : ''}`}
+                                        onClick={() => handleMoveToWishlist(item)}
+                                    >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill={isWishlisted(item.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                                        {isWishlisted(item.id) ? 'Saved to Wishlist' : 'Save for Later'}
+                                    </button>
                                 </div>
                                 <div className="item-controls">
                                     <div className="qty-controls">

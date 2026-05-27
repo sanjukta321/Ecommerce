@@ -96,6 +96,13 @@
     font-weight: 600;
     margin-bottom: 6px;
     color: var(--text-main);
+    transition: color 0.2s;
+}
+
+.item-details h3:hover {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
 .item-size {
@@ -341,3 +348,26 @@
 .coupon-msg { font-size: 12px; margin-top: 6px; }
 .coupon-msg-valid { color: #059669; }
 .coupon-msg-error { color: #dc2626; }
+
+/* Save for Later button */
+.save-for-later-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.save-for-later-btn:hover {
+    color: var(--accent);
+}
+
+.save-for-later-btn.wishlisted {
+    color: var(--accent);
+}

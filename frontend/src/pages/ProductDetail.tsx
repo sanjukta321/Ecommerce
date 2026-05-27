@@ -145,14 +145,13 @@ function buildDisplayFromStatic(p: typeof allProducts[0]): DisplayProduct {
 const ProductDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { addToCart } = useCart();
+    const { addToCart, cart } = useCart();
     const { toggleWishlist, isWishlisted } = useWishlist();
     const { showToast } = useToast();
-    const [selectedSize, setSelectedSize] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [activeImage, setActiveImage] = useState(0);
     const [showSizeChart, setShowSizeChart] = useState(false);
-    const [addedToCart, setAddedToCart] = useState(false);
+    const [addedToCart, setAddedToCart] = useState(false); // kept for toast timing only
     const [showLightbox, setShowLightbox] = useState(false);
     const [isHoveringGallery, setIsHoveringGallery] = useState(false);
 
@@ -347,6 +346,19 @@ const ProductDetail: React.FC = () => {
 
     const numericPrice = parseInt(displayPrice.replace(/[^\d]/g, ''), 10) || 0;
     const cartItemId = activeVariant ? activeVariant.item_code : (product?.id ?? '');
+    const cartItemSize = isTemplate ? (selectedVariantSize || 'Default') : 'Default';
+
+    // All variants of this template in cart — used only for the info banner
+    const totalVariantsInCart = !product || !isTemplate ? 0
+        : cart.filter(i => i.id === product.id || i.id.startsWith(product.id + '-')).reduce((s, i) => s + i.quantity, 0);
+
+    // Qty of the CURRENTLY SELECTED variant/product — drives button state (Go to Cart vs Add to Cart)
+    // Template with no variant selected = 0 so the button stays "Select Options", not "Go to Cart"
+    const cartQtyForItem = !product ? 0 : isTemplate
+        ? (activeVariant
+            ? cart.filter(i => i.id === activeVariant.item_code && i.size === cartItemSize).reduce((s, i) => s + i.quantity, 0)
+            : 0)
+        : cart.filter(i => i.id === product.id).reduce((s, i) => s + i.quantity, 0);
 
     if (loading) {
         return (
@@ -554,39 +566,6 @@ const ProductDetail: React.FC = () => {
                             </div>
                         )}
 
-                        {/* Static Size Selection (non-template Frappe / static items) */}
-                        {!isTemplate && (product.category === 'Fashion' || product.category === 'Furniture' || product.category === 'Accessories') && (
-                            <div className="size-selection">
-                                <h3>
-                                    {product.category === 'Furniture' ? 'Select Configuration' :
-                                        (product.tags?.some(t => t.toLowerCase().includes('saree')) ? 'Size' : 'Select Size')}
-                                </h3>
-                                {product.tags?.some(t => t.toLowerCase().includes('saree')) ? (
-                                    <div className="size-options">
-                                        <button className="size-btn active" style={{ cursor: 'default' }}>Free Size</button>
-                                    </div>
-                                ) : (
-                                    <div className="size-options">
-                                        {(product.category === 'Furniture'
-                                            ? (product.tags?.some(t => t.toLowerCase().includes('bed')) ? ['Queen', 'King'] : ['Standard', 'Large', 'Compact'])
-                                            : (product.tags?.some(t => t.toLowerCase().includes('shoe')) ? ['6', '7', '8', '9', '10'] : ['XS', 'Small', 'Medium', 'Large', 'XL', 'XXL'])
-                                        ).map(size => (
-                                            <button
-                                                key={size}
-                                                className={`size-btn ${selectedSize === size ? 'active' : ''}`}
-                                                onClick={() => setSelectedSize(size)}
-                                            >
-                                                {size}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                                <span className="size-chart-link" onClick={() => setShowSizeChart(true)}>
-                                    {product.category === 'Furniture' ? 'Dimensions & Details' : 'Size Chart'}
-                                </span>
-                            </div>
-                        )}
-
                         {/* Quantity */}
                         <div className="quantity-section">
                             <h3>Quantity</h3>
@@ -617,12 +596,32 @@ const ProductDetail: React.FC = () => {
                                 </div>
                             ) : (
                                 <>
+                                    {/* This exact variant is already in cart */}
+                                    {cartQtyForItem > 0 && (
+                                        <div className="in-cart-info">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                                            <span><strong>{cartQtyForItem}</strong> of this variant in your cart</span>
+                                            <button className="in-cart-view-btn" onClick={() => navigate('/cart')}>View Cart →</button>
+                                        </div>
+                                    )}
+                                    {/* Other variants are in cart but not the currently selected one */}
+                                    {cartQtyForItem === 0 && totalVariantsInCart > 0 && (
+                                        <div className="in-cart-info in-cart-info--other">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                            <span><strong>{totalVariantsInCart}</strong> other variant{totalVariantsInCart > 1 ? 's' : ''} of this product in cart</span>
+                                            <button className="in-cart-view-btn" onClick={() => navigate('/cart')}>View Cart →</button>
+                                        </div>
+                                    )}
                                     <button
-                                        className="premium-btn add-to-cart"
+                                        className={`premium-btn add-to-cart${cartQtyForItem > 0 ? ' go-to-cart-active' : ''}`}
                                         disabled={!canAddToCart}
                                         style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                                         onClick={() => {
                                             if (!canAddToCart) return;
+                                            if (cartQtyForItem > 0) {
+                                                navigate('/cart');
+                                                return;
+                                            }
                                             addToCart({
                                                 id: cartItemId,
                                                 name: activeVariant
@@ -630,16 +629,18 @@ const ProductDetail: React.FC = () => {
                                                     : product.name,
                                                 price: numericPrice,
                                                 image: displayImage,
-                                                size: isTemplate ? selectedVariantSize : selectedSize,
+                                                size: cartItemSize,
                                                 quantity,
                                             });
                                             showToast(`${product.name} added to cart!`, 'success');
                                             setAddedToCart(true);
-                                            setTimeout(() => setAddedToCart(false), 2000);
+                                            setTimeout(() => setAddedToCart(false), 1500);
                                         }}
                                     >
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
-                                        {addedToCart ? '✓ Added!' : 'Add to Cart'}
+                                        {cartQtyForItem > 0
+                                            ? <><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>Go to Cart</>
+                                            : <><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>{addedToCart ? '✓ Added!' : 'Add to Cart'}</>
+                                        }
                                     </button>
                                     <button
                                         className="premium-btn buy-now-btn"
@@ -647,17 +648,20 @@ const ProductDetail: React.FC = () => {
                                         style={!canAddToCart ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                                         onClick={() => {
                                             if (!canAddToCart) return;
-                                            addToCart({
-                                                id: cartItemId,
-                                                name: activeVariant
-                                                    ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
-                                                    : product.name,
-                                                price: numericPrice,
-                                                image: displayImage,
-                                                size: isTemplate ? selectedVariantSize : selectedSize,
-                                                quantity,
+                                            navigate('/checkout', {
+                                                state: {
+                                                    buyNow: {
+                                                        id: cartItemId,
+                                                        name: activeVariant
+                                                            ? `${product.name} (${selectedColour}, ${selectedVariantSize})`
+                                                            : product.name,
+                                                        price: numericPrice,
+                                                        image: displayImage,
+                                                        size: cartItemSize,
+                                                        quantity,
+                                                    }
+                                                }
                                             });
-                                            navigate('/cart');
                                         }}
                                     >
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>

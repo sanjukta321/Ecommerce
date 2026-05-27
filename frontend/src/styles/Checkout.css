@@ -683,3 +683,352 @@
 .saved-upi-id { font-weight: 600; color: var(--text-main); }
 .saved-card-info { font-weight: 600; color: var(--text-main); }
 .card-input { margin-top: 10px; }
+
+/* ─────────────────────────────────────────────────
+   NEW PAYMENT UI
+───────────────────────────────────────────────── */
+
+/* Method tabs */
+.pay-tabs {
+    display: flex;
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+.pay-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 13px 8px;
+    background: var(--input-bg);
+    border: none;
+    border-right: 1px solid var(--input-border);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1;
+}
+.pay-tab:last-child { border-right: none; }
+.pay-tab.active { background: var(--accent); color: #1a1a1a; }
+.pay-tab:hover:not(.active) { background: var(--hover-bg); color: var(--text-main); }
+
+/* Panel */
+.pay-panel {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+    animation: panelIn 0.2s ease;
+}
+@keyframes panelIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* UPI app buttons */
+.upi-app-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.upi-app-btn {
+    flex: 1;
+    min-width: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 6px 8px;
+    border-radius: 10px;
+    border: 1.5px solid transparent;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+    line-height: 1;
+}
+.upi-app-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.upi-app-btn:active { transform: translateY(0); }
+.upi-app-btn.gpay    { background: #e8f5e9; color: #1b5e20; border-color: #a5d6a7; }
+.upi-app-btn.phonepe { background: #ede7f6; color: #4527a0; border-color: #ce93d8; }
+.upi-app-btn.paytm   { background: #e3f2fd; color: #0d47a1; border-color: #90caf9; }
+.upi-app-btn.bhim    { background: #fff3e0; color: #bf360c; border-color: #ffcc80; }
+
+/* UPI sub-tabs */
+.upi-mode-toggle {
+    display: flex;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 18px;
+    width: fit-content;
+}
+.upi-mode-toggle button {
+    padding: 8px 18px;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--input-border);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.upi-mode-toggle button:last-child { border-right: none; }
+.upi-mode-toggle button.active { background: var(--accent); color: #1a1a1a; }
+
+/* QR display */
+.qr-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+.qr-frame {
+    position: relative;
+    border: 2px solid var(--input-border);
+    border-radius: 12px;
+    padding: 10px;
+    background: white;
+    overflow: hidden;
+}
+.qr-beam {
+    position: absolute;
+    left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+    animation: qrScan 2.4s linear infinite;
+    opacity: 0.85;
+}
+@keyframes qrScan {
+    0%   { top: 8%; }
+    100% { top: 88%; }
+}
+.qr-pay-amount {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+.qr-pay-amount span {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.qr-pay-amount strong {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -1px;
+}
+.qr-note {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    margin: 0;
+}
+
+/* UPI ID input */
+.upi-id-form { padding: 2px 0; }
+.upi-id-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+.upi-id-input:focus { border-color: var(--accent); }
+.upi-id-input::placeholder { color: var(--text-dim); }
+
+/* ─── 3D Flip Card ─────────────────────────────── */
+.card-flip-scene {
+    perspective: 1000px;
+    width: 100%;
+    max-width: 340px;
+    height: 195px;
+    margin: 0 auto 22px;
+}
+.card-flipper {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-flip-scene.flipped .card-flipper { transform: rotateY(180deg); }
+.card-face {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    backface-visibility: hidden;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+}
+.card-front {
+    background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 40%, #1d4ed8 80%, #1e40af 100%);
+    color: #fff;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.card-back {
+    background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%);
+    transform: rotateY(180deg);
+    display: flex;
+    flex-direction: column;
+}
+.cf-top { display: flex; justify-content: space-between; align-items: center; }
+.cf-brand { font-size: 17px; font-weight: 800; letter-spacing: 1.5px; font-style: italic; opacity: 0.95; }
+.cf-number {
+    display: flex;
+    gap: 14px;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    font-family: 'Courier New', monospace;
+}
+.cf-bottom { display: flex; justify-content: space-between; }
+.cf-label { font-size: 9px; letter-spacing: 1px; opacity: 0.55; margin-bottom: 3px; text-transform: uppercase; }
+.cf-value { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
+.cb-stripe { background: #111; height: 42px; margin-top: 28px; }
+.cb-sig {
+    margin: 10px 18px 0;
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.cb-sig > span { font-size: 8px; color: #6b7280; letter-spacing: 0.5px; }
+.cb-cvv { display: flex; align-items: center; gap: 6px; }
+.cb-cvv span { font-size: 10px; color: #6b7280; }
+.cb-cvv strong { font-size: 17px; color: #111; font-family: monospace; letter-spacing: 3px; }
+
+/* Card form */
+.card-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 13px;
+    margin-bottom: 14px;
+}
+.cf-field { display: flex; flex-direction: column; gap: 5px; }
+.cf-field.full-w { grid-column: span 2; }
+.cf-field label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.cf-field input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+.cf-field input:focus { border-color: var(--accent); }
+.cf-field input::placeholder { color: var(--text-dim); }
+.cf-input-box { position: relative; display: flex; align-items: center; }
+.cf-input-box svg { position: absolute; left: 12px; color: var(--text-dim); pointer-events: none; }
+.cf-input-box input { padding-left: 38px; }
+.cf-brand-badge {
+    position: absolute;
+    right: 12px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--accent);
+    font-style: italic;
+    letter-spacing: 0.5px;
+}
+.cvv-q {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 1px solid var(--text-dim);
+    font-size: 9px;
+    cursor: help;
+    color: var(--text-dim);
+}
+.accepted-networks {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+.accepted-networks > span:first-child { font-size: 11px; color: var(--text-dim); }
+.net-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+}
+.net-badge.visa   { background: #1a1f71; color: #fff; }
+.net-badge.mc     { background: #eb001b; color: #fff; }
+.net-badge.rupay  { background: #007cc3; color: #fff; }
+.net-badge.amex   { background: #007dc4; color: #fff; }
+
+/* COD panel */
+.cod-panel { display: flex; align-items: flex-start; gap: 16px; }
+.cod-icon {
+    flex-shrink: 0;
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    background: rgba(247,201,72,0.1);
+    border: 1.5px solid rgba(247,201,72,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+}
+.cod-title { font-size: 16px; font-weight: 700; margin: 0 0 5px; color: var(--text-main); }
+.cod-amount { font-size: 14px; color: var(--text-dim); margin: 0 0 10px; }
+.cod-amount strong { color: var(--accent); font-size: 18px; }
+.cod-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.cod-list li {
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.cod-list li::before {
+    content: '';
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+}
+
+/* Place order button */
+.place-order-btn { width: 100%; padding: 16px; font-size: 16px; font-weight: 700; border-radius: 12px; }
+
+@media (max-width: 480px) {
+    .pay-tab { font-size: 10px; padding: 11px 5px; gap: 4px; }
+    .pay-tab svg { display: none; }
+    .cf-number { font-size: 14px; gap: 8px; }
+    .card-form-grid { grid-template-columns: 1fr; }
+    .cf-field.full-w { grid-column: span 1; }
+    .card-flip-scene { height: 170px; }
+}

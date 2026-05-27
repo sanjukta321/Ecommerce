@@ -22,7 +22,7 @@ interface ProductCardProps {
 
 const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, images, rating = 4.5, category, has_variants, variant_count, actual_qty }) => {
     const navigate = useNavigate();
-    const { addToCart } = useCart();
+    const { addToCart, cart } = useCart();
     const { toggleWishlist, isWishlisted } = useWishlist();
     const { showToast } = useToast();
     const [showModal, setShowModal] = useState(false);
@@ -47,6 +47,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, image
         price: parseFloat(price.replace(/[^\d.]/g, '')),
         image, size: 'Default', quantity: 1
     });
+
+    // For simple products: match by id + 'Default' size
+    // For variant products: match any variant whose item_code starts with parent id
+    const cartQty = has_variants
+        ? cart.filter(i => i.id === id || i.id.startsWith(id + '-')).reduce((s, i) => s + i.quantity, 0)
+        : cart.filter(i => i.id === id && i.size === 'Default').reduce((s, i) => s + i.quantity, 0);
+
+    const handleGoToCart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigate('/cart');
+    };
 
     const handleAddToCart = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -118,11 +130,20 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, image
                             <svg width="20" height="20" viewBox="0 0 24 24" fill={isWishlisted(id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
                         </button>
                         <div className="product-overlay">
-                            <button className="quick-add-btn" onClick={handleAddToCart}>
-                                {has_variants ? 'Select Options' : 'Quick Add'}
+                            <button
+                                className="quick-add-btn"
+                                onClick={has_variants ? handleAddToCart : (cartQty > 0 ? handleGoToCart : handleAddToCart)}
+                            >
+                                {has_variants ? 'Select Options' : (cartQty > 0 ? '→ Go to Cart' : 'Quick Add')}
                             </button>
                         </div>
-                        {actual_qty !== undefined && actual_qty <= 0 && (
+                        {cartQty > 0 && (
+                            <span className="cart-qty-badge">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                                {cartQty} in cart
+                            </span>
+                        )}
+                        {actual_qty !== undefined && actual_qty <= 0 && cartQty === 0 && (
                             <span className="sold-out-badge">Sold Out</span>
                         )}
                         {has_variants && variant_count && variant_count > 0 && (
@@ -140,14 +161,56 @@ const ProductCard: React.FC<ProductCardProps> = ({ id, name, price, image, image
                     </div>
                 </div>
                 <div className="card-footer-actions">
-                    <button className="card-action-btn card-add-to-cart-btn" onClick={handleAddToCart}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
-                        {has_variants ? 'SELECT OPTIONS' : 'ADD TO CART'}
-                    </button>
-                    <button className="card-action-btn card-buy-now-btn" onClick={() => navigate(`/product/${id}`)}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                        VIEW DETAILS
-                    </button>
+                    {has_variants ? (
+                        // Variant product: always show "Select Options" so any colour can be added;
+                        // "Go to Cart" badge appears only when something is already in cart
+                        <>
+                            <button className="card-action-btn card-add-to-cart-btn" onClick={handleAddToCart}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
+                                SELECT OPTIONS
+                            </button>
+                            <button
+                                className={`card-action-btn ${cartQty > 0 ? 'card-go-to-cart-btn' : 'card-buy-now-btn'}`}
+                                onClick={cartQty > 0 ? handleGoToCart : () => navigate(`/product/${id}`)}
+                            >
+                                {cartQty > 0 ? (
+                                    <>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
+                                        CART ({cartQty})
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                        VIEW DETAILS
+                                    </>
+                                )}
+                            </button>
+                        </>
+                    ) : cartQty > 0 ? (
+                        // Simple product in cart: show qty increment + Go to Cart
+                        <>
+                            <button className="card-action-btn card-in-cart-qty-btn" onClick={handleAddToCart} title="Add one more">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                {cartQty}
+                            </button>
+                            <button className="card-action-btn card-go-to-cart-btn" onClick={handleGoToCart}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
+                                GO TO CART
+                            </button>
+                        </>
+                    ) : (
+                        // Simple product not in cart
+                        <>
+                            <button className="card-action-btn card-add-to-cart-btn" onClick={handleAddToCart}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
+                                ADD TO CART
+                            </button>
+                            <button className="card-action-btn card-buy-now-btn" onClick={() => navigate(`/product/${id}`)}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                VIEW DETAILS
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 

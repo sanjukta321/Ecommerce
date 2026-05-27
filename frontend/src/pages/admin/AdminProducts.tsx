@@ -68,6 +68,109 @@ function imgSrc(url?: string) {
   return url.startsWith('http') ? url : `${BASE}${url}`;
 }
 
+// ── Image upload helper ────────────────────────────────────────────────────
+
+async function uploadProductImage(file: File): Promise<string> {
+  const csrf =
+    (window as any).frappe?.csrf_token ||
+    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+    'fetch';
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('is_private', '0');
+  fd.append('doctype', 'Item');
+  fd.append('docname', 'new-item');
+  const res = await fetch(`${BASE}/api/method/upload_file`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-Frappe-CSRF-Token': csrf },
+    body: fd,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.message || `Upload failed (${res.status})`);
+  return json.message?.file_url as string;
+}
+
+// ── ImageUploadSlot component ──────────────────────────────────────────────
+
+interface ImageUploadSlotProps {
+  url: string;
+  onChange: (url: string) => void;
+  isPrimary?: boolean;
+  compact?: boolean;
+}
+
+function ImageUploadSlot({ url, onChange, isPrimary = false, compact = false }: ImageUploadSlotProps) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setBusy(true); setErr('');
+    try {
+      const fileUrl = await uploadProductImage(file);
+      onChange(fileUrl);
+    } catch (ex) {
+      setErr((ex as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const sz = compact ? 32 : 56;
+  const border = isPrimary ? '2px solid #6366f1' : '1px solid #e2e8f0';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: compact ? 4 : 6 }}>
+      <div style={{
+        width: sz, height: sz, borderRadius: 8,
+        border: url ? border : '1.5px dashed #cbd5e1',
+        background: url ? 'transparent' : '#f8fafc',
+        overflow: 'hidden', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative',
+      }}>
+        {url
+          ? <img src={imgSrc(url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          : <svg width={compact ? 14 : 20} height={compact ? 14 : 20} viewBox="0 0 24 24"
+              fill="none" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+        }
+        {busy && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="img-upload-spinner" />
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
+          style={{ fontSize: compact ? 10 : 11, padding: compact ? '2px 6px' : '3px 8px',
+            background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)',
+            borderRadius: 5, color: '#6366f1', cursor: 'pointer', fontWeight: 500 }}>
+          {busy ? '…' : url ? 'Change' : 'Upload'}
+        </button>
+        {url && (
+          <button type="button" onClick={() => onChange('')}
+            style={{ fontSize: compact ? 10 : 11, padding: compact ? '2px 5px' : '3px 7px',
+              background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: 5, color: '#dc2626', cursor: 'pointer', fontWeight: 500 }}>✕</button>
+        )}
+      </div>
+      {err && <div style={{ fontSize: 10, color: '#dc2626', maxWidth: compact ? 80 : 120,
+        textAlign: 'center', lineHeight: 1.3 }}>{err}</div>}
+      <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────
 
 export default function AdminProducts() {
@@ -769,20 +872,29 @@ export default function AdminProducts() {
             </div>
             <div className="admin-form-group">
               <label className="admin-form-label">Images</label>
-              {simpleForm.images.map((img, idx) => (
-                <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                  <input className="admin-form-input" style={{ flex: 1 }} placeholder={`Image URL ${idx + 1}`} value={img} onChange={e => setSimpleForm(f => { const imgs = [...f.images]; imgs[idx] = e.target.value; return { ...f, images: imgs }; })} />
-                  {img && <img src={imgSrc(img)} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
-                  {simpleForm.images.length > 1 && (
-                    <button type="button" onClick={() => setSimpleForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
-                      style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}>×</button>
-                  )}
-                </div>
-              ))}
-              {simpleForm.images.length < 10 && (
-                <button type="button" onClick={() => setSimpleForm(f => ({ ...f, images: [...f.images, ''] }))}
-                  style={{ fontSize: 13, color: '#6366f1', background: 'none', border: '1px dashed #a5b4fc', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}>+ Add Image</button>
-              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
+                {simpleForm.images.map((img, idx) => (
+                  <ImageUploadSlot
+                    key={idx}
+                    url={img}
+                    isPrimary={idx === 0}
+                    onChange={url => setSimpleForm(f => {
+                      const imgs = [...f.images];
+                      imgs[idx] = url;
+                      const cleaned = imgs.filter((u, i) => u || i === 0);
+                      return { ...f, images: cleaned.length ? cleaned : [''] };
+                    })}
+                  />
+                ))}
+                {simpleForm.images.length < 10 && (
+                  <button type="button"
+                    onClick={() => setSimpleForm(f => ({ ...f, images: [...f.images, ''] }))}
+                    style={{ width: 56, height: 56, border: '1.5px dashed #a5b4fc', borderRadius: 8,
+                      background: '#f5f3ff', color: '#6366f1', fontSize: 22, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Add image">+</button>
+                )}
+              </div>
             </div>
             <div className="admin-form-group">
               <label className="admin-form-label">{simpleEdit ? 'Stock Quantity' : 'Initial Stock'}</label>
@@ -917,21 +1029,29 @@ export default function AdminProducts() {
                                   onChange={e => updateVariant(idx, 'stock', e.target.value)}
                                   style={{ width: 70, padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }} />
                               </td>
-                              <td style={{ padding: '5px 8px', minWidth: 160 }}>
-                                {v.images.map((imgUrl, imgIdx) => (
-                                  <div key={imgIdx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
-                                    <input type="text" placeholder={imgIdx === 0 ? 'https://… (primary)' : `Image ${imgIdx + 1}`}
-                                      value={imgUrl}
-                                      onChange={e => updateVariantImage(idx, imgIdx, e.target.value)}
-                                      style={{ width: 140, padding: '3px 6px', border: '1px solid #e2e8f0', borderRadius: 5, fontSize: 11 }} />
-                                    {v.images.length > 1 && (
-                                      <button type="button" onClick={() => removeVariantImage(idx, imgIdx)}
-                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>×</button>
-                                    )}
-                                  </div>
-                                ))}
-                                <button type="button" onClick={() => addVariantImage(idx)}
-                                  style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add image</button>
+                              <td style={{ padding: '5px 8px', minWidth: 120 }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'flex-start' }}>
+                                  {v.images.map((imgUrl, imgIdx) => (
+                                    <ImageUploadSlot
+                                      key={imgIdx}
+                                      url={imgUrl}
+                                      isPrimary={imgIdx === 0}
+                                      compact
+                                      onChange={url => {
+                                        if (!url && v.images.length > 1) {
+                                          removeVariantImage(idx, imgIdx);
+                                        } else {
+                                          updateVariantImage(idx, imgIdx, url);
+                                        }
+                                      }}
+                                    />
+                                  ))}
+                                  <button type="button" onClick={() => addVariantImage(idx)}
+                                    style={{ width: 32, height: 32, border: '1.5px dashed #a5b4fc', borderRadius: 6,
+                                      background: '#f5f3ff', color: '#6366f1', fontSize: 16, cursor: 'pointer',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Add image">+</button>
+                                </div>
                               </td>
                               <td style={{ padding: '5px 8px', textAlign: 'center' }}>
                                 <input type="checkbox" checked={v.enabled} onChange={e => updateVariant(idx, 'enabled', e.target.checked)} />
@@ -957,24 +1077,29 @@ export default function AdminProducts() {
                 <div className="admin-form-group">
                   <label className="admin-form-label">Product Images</label>
                   <p style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>First image is the primary/thumbnail. Add up to 10 images for the gallery.</p>
-                  {wizard.images.map((img, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-                      <input className="admin-form-input" style={{ flex: 1 }} placeholder={idx === 0 ? 'Primary image URL *' : `Image ${idx + 1} URL`} value={img}
-                        onChange={e => setWizard(w => { const imgs = [...w.images]; imgs[idx] = e.target.value; return { ...w, images: imgs }; })} />
-                      {img && (
-                        <img src={imgSrc(img)} alt="" style={{ width: 42, height: 42, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: idx === 0 ? '2px solid #6366f1' : '1px solid #e2e8f0' }}
-                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      )}
-                      {wizard.images.length > 1 && (
-                        <button type="button" onClick={() => setWizard(w => ({ ...w, images: w.images.filter((_, i) => i !== idx) }))}
-                          style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>×</button>
-                      )}
-                    </div>
-                  ))}
-                  {wizard.images.length < 10 && (
-                    <button type="button" onClick={() => setWizard(w => ({ ...w, images: [...w.images, ''] }))}
-                      style={{ fontSize: 13, color: '#6366f1', background: 'none', border: '1px dashed #a5b4fc', borderRadius: 6, padding: '5px 14px', cursor: 'pointer' }}>+ Add Image</button>
-                  )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
+                    {wizard.images.map((img, idx) => (
+                      <ImageUploadSlot
+                        key={idx}
+                        url={img}
+                        isPrimary={idx === 0}
+                        onChange={url => setWizard(w => {
+                          const imgs = [...w.images];
+                          imgs[idx] = url;
+                          const cleaned = imgs.filter((u, i) => u || i === 0);
+                          return { ...w, images: cleaned.length ? cleaned : [''] };
+                        })}
+                      />
+                    ))}
+                    {wizard.images.length < 10 && (
+                      <button type="button"
+                        onClick={() => setWizard(w => ({ ...w, images: [...w.images, ''] }))}
+                        style={{ width: 56, height: 56, border: '1.5px dashed #a5b4fc', borderRadius: 8,
+                          background: '#f5f3ff', color: '#6366f1', fontSize: 22, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        title="Add image">+</button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

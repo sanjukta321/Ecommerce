@@ -803,4 +803,15 @@
   white-space: nowrap;
 }
 .csv-import-btn:hover { background: #6366f1; color: #fff; }
+
+/* Image upload slot spinner */
+.img-upload-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e7ff;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: img-spin 0.7s linear infinite;
+}
+@keyframes img-spin { to { transform: rotate(360deg); } }
 .csv-import-btn:disabled { opacity: 0.5; cursor: not-allowed; }

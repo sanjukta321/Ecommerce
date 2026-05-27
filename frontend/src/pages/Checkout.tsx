@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useCart, type CartItem } from '../context/CartContext';
+import { QRCodeSVG } from 'qrcode.react';
 import Footer from '../components/Footer';
 import '../styles/Checkout.css';
 
@@ -34,9 +35,17 @@ interface SavedAddress {
     country: string;
 }
 
+const UPI_VPA = import.meta.env.VITE_UPI_VPA || 'merchant@upi';
+
 const Checkout: React.FC = () => {
     const navigate = useNavigate();
-    const { cart, cartTotal, clearCart } = useCart();
+    const location = useLocation();
+    const { cart, clearCart } = useCart();
+
+    // Buy Now: single item passed via navigation state — bypasses the regular cart
+    const buyNowItem = (location.state as { buyNow?: CartItem } | null)?.buyNow;
+    const checkoutItems: CartItem[] = buyNowItem ? [buyNowItem] : cart;
+    const checkoutTotal = checkoutItems.reduce((t, i) => t + i.price * i.quantity, 0);
     const [step, setStep] = useState<CheckoutStep>('mobile');
 
     // Step 1: Mobile
@@ -73,7 +82,12 @@ const Checkout: React.FC = () => {
     const [savedPayments, setSavedPayments] = useState<{ upi: Array<{id: string; upi: string}>; cards: Array<{id: string; last4: string; card_type: string; holder_name: string; expiry_month: string; expiry_year: string}> }>({ upi: [], cards: [] });
     const [selectedSavedUpi, setSelectedSavedUpi] = useState<string>('');
     const [upiInput, setUpiInput] = useState('');
-    const [selectedSavedCard, setSelectedSavedCard] = useState<string>('');
+    const [cardNumber, setCardNumber] = useState('');
+    const [cardName, setCardName] = useState('');
+    const [cardExpiry, setCardExpiry] = useState('');
+    const [cardCvv, setCardCvv] = useState('');
+    const [cardFlipped, setCardFlipped] = useState(false);
+    const [upiMode, setUpiMode] = useState<'qr' | 'id'>('qr');
 
     // Step 4: Success
     const [orderId, setOrderId] = useState('');
@@ -115,13 +129,13 @@ const Checkout: React.FC = () => {
             .catch(() => {});
     }, [step]);
 
-    if (cart.length === 0 && step !== 'success') {
+    if (checkoutItems.length === 0 && step !== 'success') {
         navigate('/cart');
         return null;
     }
 
-    const deliveryFee = cartTotal > 500 ? 0 : 99;
-    const orderTotal = cartTotal + deliveryFee;
+    const deliveryFee = checkoutTotal > 500 ? 0 : 99;
+    const orderTotal = checkoutTotal + deliveryFee;
 
     // ── Helpers ──────────────────────────────────────────────────────
 
@@ -144,6 +158,29 @@ const Checkout: React.FC = () => {
         [addr.address_line1, addr.address_line2, addr.city, addr.state, addr.pincode]
             .filter(Boolean)
             .join(', ');
+
+    const upiUri = `upi://pay?pa=${UPI_VPA}&pn=SB+Store&am=${orderTotal.toFixed(2)}&tn=Order+Payment&cu=INR`;
+
+    const openUpiApp = (scheme?: string) => {
+        const uri = scheme
+            ? `${scheme}://pay?pa=${UPI_VPA}&pn=SB+Store&am=${orderTotal.toFixed(2)}&tn=Order+Payment&cu=INR`
+            : upiUri;
+        window.location.href = uri;
+    };
+
+    const formatCardNum = (v: string) => v.replace(/\D/g,'').slice(0,16).replace(/(\d{4})/g,'$1 ').trim();
+    const formatExpiry = (v: string) => {
+        const d = v.replace(/\D/g,'').slice(0,4);
+        return d.length > 2 ? `${d.slice(0,2)}/${d.slice(2)}` : d;
+    };
+    const getCardBrand = (num: string) => {
+        const n = num.replace(/\s/g,'');
+        if (/^4/.test(n)) return 'VISA';
+        if (/^5[1-5]/.test(n)) return 'MASTERCARD';
+        if (/^6/.test(n)) return 'RUPAY';
+        if (/^3[47]/.test(n)) return 'AMEX';
+        return '';
+    };
 
     // ── Handlers ──────────────────────────────────────────────────────
 
@@ -243,7 +280,7 @@ const Checkout: React.FC = () => {
         setOrderError('');
         setPlacing(true);
         try {
-            const cartPayload = cart.map(item => ({
+            const cartPayload = checkoutItems.map(item => ({
                 id:       item.id,
                 name:     item.name,
                 price:    item.price,
@@ -285,8 +322,10 @@ const Checkout: React.FC = () => {
                 setOrderId(data.message.sales_order || '');
                 setInvoiceId(data.message.sales_invoice || '');
                 if (mobile) localStorage.setItem('checkout_mobile', mobile);
-                clearCart();
-                localStorage.removeItem('applied_coupon');
+                if (!buyNowItem) {
+                    clearCart();
+                    localStorage.removeItem('applied_coupon');
+                }
                 setStep('success');
             } else {
                 const errMsg =
@@ -488,97 +527,225 @@ const Checkout: React.FC = () => {
                         {step === 'payment' && (
                             <div className="step-content payment-step fade-in">
                                 <h2>Payment Method</h2>
-                                <div className="payment-options">
-                                    <div className={`payment-option ${paymentMethod === 'upi' ? 'selected' : ''}`} onClick={() => setPaymentMethod('upi')}>
-                                        <div className="radio-circle" />
-                                        <div className="option-info">
-                                            <span>UPI</span>
-                                            <p>Google Pay, PhonePe, Paytm</p>
-                                        </div>
-                                    </div>
-                                    <div className={`payment-option ${paymentMethod === 'card' ? 'selected' : ''}`} onClick={() => setPaymentMethod('card')}>
-                                        <div className="radio-circle" />
-                                        <div className="option-info">
-                                            <span>Credit / Debit Card</span>
-                                            <p>Visa, Mastercard, RuPay</p>
-                                        </div>
-                                    </div>
-                                    <div className={`payment-option ${paymentMethod === 'cod' ? 'selected' : ''}`} onClick={() => setPaymentMethod('cod')}>
-                                        <div className="radio-circle" />
-                                        <div className="option-info">
-                                            <span>Cash on Delivery</span>
-                                            <p>Pay when you receive your order</p>
-                                        </div>
-                                    </div>
+
+                                {/* Method selector tabs */}
+                                <div className="pay-tabs">
+                                    <button className={`pay-tab${paymentMethod === 'upi' ? ' active' : ''}`} onClick={() => setPaymentMethod('upi')}>
+                                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                                        UPI
+                                    </button>
+                                    <button className={`pay-tab${paymentMethod === 'card' ? ' active' : ''}`} onClick={() => setPaymentMethod('card')}>
+                                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                                        Credit / Debit Card
+                                    </button>
+                                    <button className={`pay-tab${paymentMethod === 'cod' ? ' active' : ''}`} onClick={() => setPaymentMethod('cod')}>
+                                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                        Cash on Delivery
+                                    </button>
                                 </div>
 
+                                {/* ─ UPI Panel ─ */}
                                 {paymentMethod === 'upi' && (
-                                    <div className="upi-input fade-in">
-                                        {savedPayments.upi.length > 0 && (
-                                            <div className="saved-payment-list">
-                                                {savedPayments.upi.map(u => (
-                                                    <label key={u.id} className={`saved-payment-option ${selectedSavedUpi === u.upi ? 'selected' : ''}`}>
-                                                        <input
-                                                            type="radio"
-                                                            name="saved_upi"
-                                                            value={u.upi}
-                                                            checked={selectedSavedUpi === u.upi}
-                                                            onChange={() => { setSelectedSavedUpi(u.upi); setUpiInput(''); }}
-                                                        />
-                                                        <span className="saved-upi-id">{u.upi}</span>
-                                                    </label>
-                                                ))}
-                                                <label className={`saved-payment-option ${selectedSavedUpi === '' ? 'selected' : ''}`}>
-                                                    <input
-                                                        type="radio"
-                                                        name="saved_upi"
-                                                        value=""
-                                                        checked={selectedSavedUpi === ''}
-                                                        onChange={() => setSelectedSavedUpi('')}
+                                    <div className="pay-panel fade-in">
+                                        {/* App quick-launch buttons */}
+                                        <div className="upi-app-row">
+                                            <button className="upi-app-btn gpay" onClick={() => openUpiApp('gpay')} title="Open Google Pay">
+                                                <svg width="20" height="20" viewBox="0 0 48 48"><text y="38" fontSize="38">G</text></svg>
+                                                G Pay
+                                            </button>
+                                            <button className="upi-app-btn phonepe" onClick={() => openUpiApp('phonepe')} title="Open PhonePe">
+                                                <svg width="20" height="20" viewBox="0 0 48 48"><text y="38" fontSize="38">P</text></svg>
+                                                PhonePe
+                                            </button>
+                                            <button className="upi-app-btn paytm" onClick={() => openUpiApp('paytmmp')} title="Open Paytm">
+                                                <svg width="20" height="20" viewBox="0 0 48 48"><text y="38" fontSize="36">₿</text></svg>
+                                                Paytm
+                                            </button>
+                                            <button className="upi-app-btn bhim" onClick={() => openUpiApp()} title="Open BHIM / any UPI app">
+                                                <svg width="20" height="20" viewBox="0 0 48 48"><text y="38" fontSize="34">B</text></svg>
+                                                BHIM
+                                            </button>
+                                        </div>
+
+                                        <div className="upi-mode-toggle">
+                                            <button className={upiMode === 'qr' ? 'active' : ''} onClick={() => setUpiMode('qr')}>
+                                                Scan QR Code
+                                            </button>
+                                            <button className={upiMode === 'id' ? 'active' : ''} onClick={() => setUpiMode('id')}>
+                                                UPI ID
+                                            </button>
+                                        </div>
+
+                                        {upiMode === 'qr' && (
+                                            <div className="qr-display fade-in">
+                                                <div className="qr-frame">
+                                                    <QRCodeSVG
+                                                        value={upiUri}
+                                                        size={180}
+                                                        bgColor="#ffffff"
+                                                        fgColor="#111827"
+                                                        level="M"
+                                                        marginSize={1}
                                                     />
-                                                    <span>Enter new UPI ID</span>
-                                                </label>
+                                                    <div className="qr-beam" />
+                                                </div>
+                                                <div className="qr-pay-amount">
+                                                    <span>Total Amount</span>
+                                                    <strong>₹{orderTotal.toLocaleString('en-IN')}</strong>
+                                                </div>
+                                                <p className="qr-note">Scan with GPay · PhonePe · Paytm · BHIM or any UPI app</p>
                                             </div>
                                         )}
-                                        {selectedSavedUpi === '' && (
-                                            <input
-                                                type="text"
-                                                placeholder="Enter VPA / UPI ID (e.g. user@okaxis)"
-                                                value={upiInput}
-                                                onChange={e => setUpiInput(e.target.value)}
-                                            />
+
+                                        {upiMode === 'id' && (
+                                            <div className="upi-id-form fade-in">
+                                                {savedPayments.upi.length > 0 && (
+                                                    <div className="saved-payment-list">
+                                                        {savedPayments.upi.map(u => (
+                                                            <label key={u.id} className={`saved-payment-option${selectedSavedUpi === u.upi ? ' selected' : ''}`}>
+                                                                <input type="radio" name="saved_upi" value={u.upi}
+                                                                    checked={selectedSavedUpi === u.upi}
+                                                                    onChange={() => { setSelectedSavedUpi(u.upi); setUpiInput(''); }}
+                                                                />
+                                                                <span className="saved-upi-id">{u.upi}</span>
+                                                            </label>
+                                                        ))}
+                                                        <label className={`saved-payment-option${selectedSavedUpi === '' ? ' selected' : ''}`}>
+                                                            <input type="radio" name="saved_upi" value=""
+                                                                checked={selectedSavedUpi === ''}
+                                                                onChange={() => setSelectedSavedUpi('')}
+                                                            />
+                                                            <span>New UPI ID</span>
+                                                        </label>
+                                                    </div>
+                                                )}
+                                                {selectedSavedUpi === '' && (
+                                                    <input className="upi-id-input" type="text"
+                                                        placeholder="e.g. yourname@okaxis"
+                                                        value={upiInput}
+                                                        onChange={e => setUpiInput(e.target.value)}
+                                                    />
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 )}
 
+                                {/* ─ Card Panel ─ */}
                                 {paymentMethod === 'card' && (
-                                    <div className="card-input fade-in">
-                                        {savedPayments.cards.length > 0 && (
-                                            <div className="saved-payment-list">
-                                                {savedPayments.cards.map(c => (
-                                                    <label key={c.id} className={`saved-payment-option ${selectedSavedCard === c.id ? 'selected' : ''}`}>
-                                                        <input
-                                                            type="radio"
-                                                            name="saved_card"
-                                                            value={c.id}
-                                                            checked={selectedSavedCard === c.id}
-                                                            onChange={() => setSelectedSavedCard(c.id)}
-                                                        />
-                                                        <span className="saved-card-info">
-                                                            {c.card_type} •••• {c.last4}
-                                                            <span style={{ color: '#9ca3af', fontSize: 11, marginLeft: 6 }}>
-                                                                {c.holder_name} · {c.expiry_month}/{c.expiry_year}
-                                                            </span>
-                                                        </span>
-                                                    </label>
-                                                ))}
+                                    <div className="pay-panel fade-in">
+                                        <div className={`card-flip-scene${cardFlipped ? ' flipped' : ''}`}>
+                                            <div className="card-flipper">
+                                                <div className="card-face card-front">
+                                                    <div className="cf-top">
+                                                        <svg className="cf-chip" width="34" height="26" viewBox="0 0 34 26">
+                                                            <rect width="34" height="26" rx="4" fill="#D4AF37"/>
+                                                            <rect x="3" y="3" width="28" height="20" rx="2" fill="none" stroke="#A0820D" strokeWidth="1"/>
+                                                            <line x1="17" y1="3" x2="17" y2="23" stroke="#A0820D" strokeWidth="1"/>
+                                                            <line x1="3" y1="13" x2="31" y2="13" stroke="#A0820D" strokeWidth="1"/>
+                                                            <line x1="3" y1="8" x2="31" y2="8" stroke="#A0820D" strokeWidth="0.6"/>
+                                                            <line x1="3" y1="18" x2="31" y2="18" stroke="#A0820D" strokeWidth="0.6"/>
+                                                        </svg>
+                                                        <span className="cf-brand">{getCardBrand(cardNumber) || 'CARD'}</span>
+                                                    </div>
+                                                    <div className="cf-number">
+                                                        {[0,1,2,3].map(i => {
+                                                            const part = cardNumber.replace(/\s/g,'').slice(i*4,(i+1)*4);
+                                                            return <span key={i}>{part || '••••'}</span>;
+                                                        })}
+                                                    </div>
+                                                    <div className="cf-bottom">
+                                                        <div>
+                                                            <div className="cf-label">CARD HOLDER</div>
+                                                            <div className="cf-value">{cardName || 'YOUR NAME'}</div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="cf-label">EXPIRES</div>
+                                                            <div className="cf-value">{cardExpiry || 'MM/YY'}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="card-face card-back">
+                                                    <div className="cb-stripe"/>
+                                                    <div className="cb-sig">
+                                                        <span>AUTHORIZED SIGNATURE</span>
+                                                        <div className="cb-cvv">
+                                                            <span>CVV</span>
+                                                            <strong>{cardCvv || '•••'}</strong>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        )}
-                                        {savedPayments.cards.length === 0 && (
-                                            <p style={{ fontSize: 13, color: '#9ca3af', margin: '8px 0' }}>
-                                                No saved cards. Add a card in your profile.
-                                            </p>
-                                        )}
+                                        </div>
+                                        <div className="card-form-grid">
+                                            <div className="cf-field full-w">
+                                                <label>Card Number</label>
+                                                <div className="cf-input-box">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                                                    <input type="text" inputMode="numeric"
+                                                        placeholder="1234  5678  9012  3456"
+                                                        value={cardNumber} maxLength={19}
+                                                        onChange={e => setCardNumber(formatCardNum(e.target.value))}
+                                                        onFocus={() => setCardFlipped(false)}
+                                                    />
+                                                    {getCardBrand(cardNumber) && <span className="cf-brand-badge">{getCardBrand(cardNumber)}</span>}
+                                                </div>
+                                            </div>
+                                            <div className="cf-field full-w">
+                                                <label>Cardholder Name</label>
+                                                <input type="text" placeholder="Name as on card"
+                                                    value={cardName}
+                                                    onChange={e => setCardName(e.target.value.toUpperCase())}
+                                                    onFocus={() => setCardFlipped(false)}
+                                                />
+                                            </div>
+                                            <div className="cf-field">
+                                                <label>Expiry Date</label>
+                                                <input type="text" inputMode="numeric" placeholder="MM / YY"
+                                                    value={cardExpiry} maxLength={5}
+                                                    onChange={e => setCardExpiry(formatExpiry(e.target.value))}
+                                                    onFocus={() => setCardFlipped(false)}
+                                                />
+                                            </div>
+                                            <div className="cf-field">
+                                                <label>CVV <span className="cvv-q" title="3-digit code on back of card">?</span></label>
+                                                <input type="password" inputMode="numeric" placeholder="•••"
+                                                    value={cardCvv} maxLength={4}
+                                                    onChange={e => setCardCvv(e.target.value.replace(/\D/g,'').slice(0,4))}
+                                                    onFocus={() => setCardFlipped(true)}
+                                                    onBlur={() => setCardFlipped(false)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="accepted-networks">
+                                            <span>Accepted:</span>
+                                            <span className="net-badge visa">VISA</span>
+                                            <span className="net-badge mc">MC</span>
+                                            <span className="net-badge rupay">RuPay</span>
+                                            <span className="net-badge amex">AMEX</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ─ COD Panel ─ */}
+                                {paymentMethod === 'cod' && (
+                                    <div className="pay-panel cod-panel fade-in">
+                                        <div className="cod-icon">
+                                            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                                <rect x="2" y="6" width="20" height="12" rx="2"/>
+                                                <circle cx="12" cy="12" r="3"/>
+                                                <path d="M6 12h.01M18 12h.01"/>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h4 className="cod-title">Cash on Delivery</h4>
+                                            <p className="cod-amount">Pay <strong>₹{orderTotal.toLocaleString('en-IN')}</strong> at your doorstep</p>
+                                            <ul className="cod-list">
+                                                <li>Keep exact change ready</li>
+                                                <li>Pay only to the delivery partner</li>
+                                                <li>No online transaction needed</li>
+                                            </ul>
+                                        </div>
                                     </div>
                                 )}
 
@@ -616,26 +783,19 @@ const Checkout: React.FC = () => {
 
                                 {orderError && (
                                     <div style={{
-                                        margin: '12px 0',
-                                        padding: '10px 14px',
+                                        margin: '12px 0', padding: '10px 14px',
                                         background: 'rgba(239,68,68,0.08)',
                                         border: '1px solid rgba(239,68,68,0.3)',
-                                        borderRadius: 8,
-                                        color: '#dc2626',
-                                        fontSize: 13,
+                                        borderRadius: 8, color: '#dc2626', fontSize: 13,
                                     }}>
                                         {orderError}
                                     </div>
                                 )}
 
-                                <button
-                                    className="premium-btn place-order-btn"
-                                    onClick={handlePlaceOrder}
-                                    disabled={placing}
-                                >
-                                    {placing
-                                        ? 'Placing Order...'
-                                        : `Place Order · ₹${orderTotal.toLocaleString('en-IN')}`}
+                                <button className="premium-btn place-order-btn" onClick={handlePlaceOrder} disabled={placing}>
+                                    {placing ? 'Processing...' : paymentMethod === 'cod'
+                                        ? `Place Order · ₹${orderTotal.toLocaleString('en-IN')}`
+                                        : `Pay Now · ₹${orderTotal.toLocaleString('en-IN')}`}
                                 </button>
                             </div>
                         )}
@@ -689,8 +849,8 @@ const Checkout: React.FC = () => {
                             <h3>Order Summary</h3>
                             <div className="summary-details">
                                 <div className="summary-row">
-                                    <span>Items ({cart.reduce((a, i) => a + i.quantity, 0)})</span>
-                                    <span>₹{cartTotal.toLocaleString('en-IN')}</span>
+                                    <span>Items ({checkoutItems.reduce((a, i) => a + i.quantity, 0)})</span>
+                                    <span>₹{checkoutTotal.toLocaleString('en-IN')}</span>
                                 </div>
                                 <div className="summary-row">
                                     <span>Delivery</span>
@@ -703,7 +863,7 @@ const Checkout: React.FC = () => {
                                 </div>
                             </div>
                             <div className="mini-cart">
-                                {cart.map(item => (
+                                {checkoutItems.map(item => (
                                     <div key={item.id} className="mini-item">
                                         <img src={item.image} alt={item.name} />
                                         <div className="mini-info">
