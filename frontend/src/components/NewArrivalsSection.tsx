@@ -1,92 +1,38 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import '../styles/NewArrivalsSection.css';
 
-interface Product {
-    id: string;
-    brand: string;
-    name: string;
-    price: number;
-    originalPrice?: number;
-    discount?: number;
-    image: string;
-    rating: number;
-    reviews: number;
-    isNew: boolean;
-    tag?: string;
-    freeShipping?: boolean;
-}
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
-const newProducts: Product[] = [
-    {
-        id: 'n1',
-        brand: 'Urban Elite',
-        name: 'Oversized Graffiti Hoodie',
-        price: 2499,
-        originalPrice: 4999,
-        discount: 50,
-        image: 'https://images.unsplash.com/photo-1556906781-9a412961c28c?auto=format&fit=crop&q=80&w=600',
-        rating: 4.8,
-        reviews: 124,
-        isNew: true,
-        tag: 'Just Launched',
-        freeShipping: true
-    },
-    {
-        id: 'n2',
-        brand: 'ZARA',
-        name: 'Linen Blend Blazer',
-        price: 5999,
-        image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&q=80&w=600',
-        rating: 4.6,
-        reviews: 89,
-        isNew: true,
-        tag: 'Trending',
-        freeShipping: true
-    },
-    {
-        id: 'n3',
-        brand: 'Roadster',
-        name: 'High-Top Suede Sneakers',
-        price: 3299,
-        originalPrice: 4500,
-        discount: 26,
-        image: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&q=80&w=600',
-        rating: 4.4,
-        reviews: 215,
-        isNew: true,
-        tag: 'Latest'
-    },
-    {
-        id: 'n4',
-        brand: 'H&M',
-        name: 'Relaxed Fit Cargo Pants',
-        price: 2299,
-        image: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&q=80&w=600',
-        rating: 4.5,
-        reviews: 340,
-        isNew: true,
-        tag: 'New'
-    },
-    {
-        id: 'n7',
-        brand: 'H&M Kids',
-        name: 'Floral Print Tulle Dress',
-        price: 1499,
-        image: 'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&q=80&w=600',
-        rating: 4.8,
-        reviews: 32,
-        isNew: true,
-        tag: 'Latest'
-    }
-];
+interface ApiItem {
+    name: string;
+    item_name: string;
+    item_group: string;
+    selling_price: number;
+    standard_rate: number;
+    image: string;
+    images: string[];
+}
 
 const NewArrivalsSection: React.FC = () => {
     const navigate = useNavigate();
     const { addToCart } = useCart();
     const { toggleWishlist, isWishlisted } = useWishlist();
+
+    const [products, setProducts] = useState<ApiItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch(`${BASE}/api/method/store_customizations.api.products.get_all_products?is_new_arrival=1&limit=5`, {
+            credentials: 'include',
+        })
+            .then(r => r.json())
+            .then(d => setProducts(d?.message?.items ?? []))
+            .catch(() => setProducts([]))
+            .finally(() => setLoading(false));
+    }, []);
 
     return (
         <section className="new-arrivals-section container">
@@ -119,55 +65,66 @@ const NewArrivalsSection: React.FC = () => {
                 </button>
             </div>
 
-            <div className="new-product-grid">
-                {newProducts.map((product) => (
-                    <div key={product.id} className="new-product-card-wrap">
-                        <div className="new-product-card" onClick={() => navigate(`/product/${product.id}`)} style={{ cursor: 'pointer' }}>
-                            <div className="product-image-container">
-                                {product.isNew && <span className="new-badge">{product.tag || 'NEW'}</span>}
-                                <img src={product.image} alt={product.name} />
-                                <div className="quick-actions" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                        className={`quick-btn wishlist ${isWishlisted(product.id) ? 'active' : ''}`}
-                                        title={isWishlisted(product.id) ? 'Remove from Wishlist' : 'Add to Wishlist'}
-                                        onClick={() => toggleWishlist({ id: product.id, name: product.name, price: product.price, image: product.image })}
-                                    >
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-                                    </button>
-                                    <button className="quick-btn cart" title="Add to Cart" onClick={() => addToCart({ id: product.id, name: product.name, price: product.price, image: product.image, size: 'Default', quantity: 1 })}>
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>
-                                    </button>
-                                    <button className="quick-btn view" title="View Details" onClick={() => navigate(`/product/${product.id}`)}>
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="product-details">
-                                <span className="brand">{product.brand}</span>
-                                <h3 title={product.name}>{product.name}</h3>
-                                <div className="rating-row">
-                                    <span className="stars">★★★★☆</span>
-                                    <span className="count">({product.reviews})</span>
-                                </div>
-                                <div className="price-info">
-                                    <span className="price">₹{product.price}</span>
-                                    {product.originalPrice && <span className="original">₹{product.originalPrice}</span>}
-                                    {product.discount && <span className="discount">({product.discount}% OFF)</span>}
-                                </div>
-                                {product.freeShipping && (
-                                    <div className="info-strip">
-                                        <span>Free Shipping | 7 Days Return</span>
-                                    </div>
-                                )}
-                                <div className="card-footer-actions">
-                                    <button className="add-cart-btn" onClick={(e) => { e.stopPropagation(); addToCart({ id: product.id, name: product.name, price: product.price, image: product.image, size: 'Default', quantity: 1 }); }}>ADD TO CART</button>
-                                    <button className="view-details-btn" onClick={() => navigate(`/product/${product.id}`)}>VIEW DETAILS</button>
-                                </div>
-                            </div>
+            {loading && (
+                <div className="new-product-grid">
+                    {[...Array(5)].map((_, i) => (
+                        <div key={i} className="new-product-card-wrap">
+                            <div className="new-product-card na-skeleton" />
                         </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
+
+            {!loading && products.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-dim)', fontSize: 15 }}>
+                    No new arrivals yet. Check back soon!
+                </div>
+            )}
+
+            {!loading && products.length > 0 && (
+                <div className="new-product-grid">
+                    {products.map((product) => {
+                        const price = product.selling_price || product.standard_rate || 0;
+                        const image = product.images?.[0] || product.image || '';
+                        return (
+                            <div key={product.name} className="new-product-card-wrap">
+                                <div className="new-product-card" onClick={() => navigate(`/product/${product.name}`)} style={{ cursor: 'pointer' }}>
+                                    <div className="product-image-container">
+                                        <span className="new-badge">NEW</span>
+                                        <img src={image} alt={product.item_name} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                        <div className="quick-actions" onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                                className={`quick-btn wishlist ${isWishlisted(product.name) ? 'active' : ''}`}
+                                                title={isWishlisted(product.name) ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                                                onClick={() => toggleWishlist({ id: product.name, name: product.item_name, price, image })}
+                                            >
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill={isWishlisted(product.name) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                                            </button>
+                                            <button className="quick-btn cart" title="Add to Cart" onClick={() => addToCart({ id: product.name, name: product.item_name, price, image, size: 'Default', quantity: 1 })}>
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>
+                                            </button>
+                                            <button className="quick-btn view" title="View Details" onClick={() => navigate(`/product/${product.name}`)}>
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="product-details">
+                                        <span className="brand">{product.item_group}</span>
+                                        <h3 title={product.item_name}>{product.item_name}</h3>
+                                        <div className="price-info">
+                                            <span className="price">₹{price.toLocaleString('en-IN')}</span>
+                                        </div>
+                                        <div className="card-footer-actions">
+                                            <button className="add-cart-btn" onClick={(e) => { e.stopPropagation(); addToCart({ id: product.name, name: product.item_name, price, image, size: 'Default', quantity: 1 }); }}>ADD TO CART</button>
+                                            <button className="view-details-btn" onClick={() => navigate(`/product/${product.name}`)}>VIEW DETAILS</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </section>
     );
 };

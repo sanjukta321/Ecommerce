@@ -88,6 +88,10 @@ fixtures = [
             ["role", "=", "Invoice Reader"],
         ],
     },
+    {
+        "dt": "Notification",
+        "filters": [["name", "like", "SB Store%"]],
+    },
 ]
 
 # SPA routing — all React Router paths serve the same index.html shell.

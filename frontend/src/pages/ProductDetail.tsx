@@ -161,7 +161,7 @@ const ProductDetail: React.FC = () => {
     const [stockAlertLoading, setStockAlertLoading] = useState(false);
     const [stockAlertMsg, setStockAlertMsg] = useState('');
 
-    interface ReviewEntry { name: string; reviewer: string; rating: number; review_title: string; comment: string; creation: string; }
+    interface ReviewEntry { name: string; reviewer: string; rating: number; review_title: string; comment: string; creation: string; images?: string[]; }
     const [itemReviews, setItemReviews] = useState<ReviewEntry[]>([]);
     const [avgRating, setAvgRating] = useState(0);
     const [reviewCount, setReviewCount] = useState(0);
@@ -727,6 +727,19 @@ const ProductDetail: React.FC = () => {
                                     </div>
                                     {r.review_title && <strong style={{ display: 'block', marginBottom: 4 }}>{r.review_title}</strong>}
                                     <p>{r.comment}</p>
+                                    {r.images && r.images.length > 0 && (
+                                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                                            {r.images.map((url, i) => (
+                                                <a key={i} href={`${BASE}${url}`} target="_blank" rel="noreferrer">
+                                                    <img
+                                                        src={`${BASE}${url}`}
+                                                        alt={`review photo ${i + 1}`}
+                                                        style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', cursor: 'pointer' }}
+                                                    />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         )}

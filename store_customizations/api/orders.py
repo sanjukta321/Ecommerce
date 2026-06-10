@@ -370,31 +370,47 @@ def download_invoice_pdf(sales_order):
 
     print_format = (
         frappe.db.get_value("DocType", "Sales Invoice", "default_print_format")
+        or frappe.db.get_value("Print Format", {"doc_type": "Sales Invoice", "disabled": 0}, "name")
         or "Standard"
     )
 
-    # Use a dedicated low-privilege service user (only SI read access)
-    # configured in site_config: {"invoice_reader_user": "invoice-reader@store.com"}
-    # Falls back to ignore_permissions if not configured
-    invoice_reader = frappe.conf.get("invoice_reader_user")
+    # Ownership already verified above. Pre-load the SI document and set
+    # doc.flags.ignore_permissions=True so printview's check_permission()
+    # passes without touching frappe.session (no logout on refresh).
+    si_doc = frappe.get_doc("Sales Invoice", si_name)
+    si_doc.flags.ignore_permissions = True
+    html = frappe.get_print("Sales Invoice", si_name, print_format=print_format, doc=si_doc)
 
-    saved_user = frappe.session.user
-    try:
-        if invoice_reader and frappe.db.exists("User", invoice_reader):
-            frappe.set_user(invoice_reader)
-            html = frappe.get_print("Sales Invoice", si_name, print_format=print_format)
-        else:
-            html = frappe.get_print(
-                "Sales Invoice", si_name,
-                print_format=print_format,
-                ignore_permissions=True,
-            )
-    finally:
-        frappe.set_user(saved_user)
+    # frappe.utils.pdf.get_pdf calls scrub_urls() internally which re-expands
+    # relative URLs to frappe.utils.get_url() — the configured host_name
+    # (a zrok/ngrok tunnel). wkhtmltopdf then tries to fetch those from the
+    # external tunnel and times out.
+    #
+    # Fix: monkey-patch scrub_urls to rewrite the tunnel URL → 127.0.0.1
+    # so wkhtmltopdf fetches all assets locally.
+    port = frappe.conf.get("webserver_port", 8100)
+    configured_url = frappe.utils.get_url().rstrip("/")
+    local_url = f"http://127.0.0.1:{port}"
 
     # pyrefly: ignore [missing-import]
-    from frappe.utils.pdf import get_pdf
-    pdf_content = get_pdf(html)
+    import frappe.utils.pdf as _pdf_mod
+    import frappe.utils.data as _data_mod
+    _orig_scrub = _data_mod.scrub_urls
+
+    def _patched_scrub(h):
+        result = _orig_scrub(h)
+        if configured_url and configured_url != local_url:
+            result = result.replace(configured_url, local_url)
+        return result
+
+    _data_mod.scrub_urls = _patched_scrub
+    _pdf_mod.scrub_urls = _patched_scrub
+    try:
+        from frappe.utils.pdf import get_pdf
+        pdf_content = get_pdf(html)
+    finally:
+        _data_mod.scrub_urls = _orig_scrub
+        _pdf_mod.scrub_urls = _orig_scrub
 
     frappe.local.response.filename = f"Invoice-{si_name}.pdf"
     frappe.local.response.filecontent = pdf_content

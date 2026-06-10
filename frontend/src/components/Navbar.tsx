@@ -5,6 +5,7 @@ import type { Product } from '../data/allProducts';
 import { frappeApi } from '../api/frappe';
 import { mapToProduct } from '../hooks/useFrappeProducts';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { BrandLogo } from './BrandLogo';
 import '../styles/Navbar.css';
@@ -25,6 +26,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const { cartCount } = useCart();
+    const { wishlistCount } = useWishlist();
     const accountDropdownRef = React.useRef<HTMLDivElement>(null);
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         const savedTheme = localStorage.getItem('theme');
@@ -419,6 +421,11 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
                                 </div>
                             </div>
                         )}
+                        <Link to="/wishlist" className="action-item wishlist-nav" title="Wishlist">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                            {wishlistCount > 0 && <span className="cart-badge">{wishlistCount}</span>}
+                            <span>Wishlist</span>
+                        </Link>
                         <Link to="/cart" className="action-item cart">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.71a2 2 0 0 0 2-1.61l1.71-8.55H5.41" /></svg>
                             {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
@@ -465,6 +472,7 @@ const Navbar: React.FC<NavbarProps> = ({ isLoggedIn, onLogout }) => {
 
                         <li><Link to="/offers" onClick={close}>Offers</Link></li>
                         <li><Link to="/new-arrivals" onClick={close}>New Arrivals</Link></li>
+                        <li><Link to="/wishlist" onClick={close}>Wishlist {wishlistCount > 0 && `(${wishlistCount})`}</Link></li>
                         <li><Link to="/contact" onClick={close}>Contact Us</Link></li>
                         <li>
                             <Link to="/become-seller" onClick={close} style={{ color: 'var(--accent)', fontWeight: 800 }}>

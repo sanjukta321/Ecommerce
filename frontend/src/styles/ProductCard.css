@@ -108,8 +108,8 @@
 .card-footer-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    padding: 15px;
+    gap: 8px;
+    padding: 10px 12px;
     background: var(--bg-main);
     border-top: 1px solid var(--glass-border);
     margin-top: auto;
@@ -276,17 +276,22 @@
 
 .card-action-btn {
     flex: 1;
-    padding: 11px 8px;
+    min-width: 0;
+    padding: 9px 6px;
     border: none;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: 0.3px;
     cursor: pointer;
     transition: var(--transition);
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .card-add-to-cart-btn {

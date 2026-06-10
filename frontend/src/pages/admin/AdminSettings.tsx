@@ -1,18 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Settings, Users, CreditCard, Truck, Package, Star, Mail, Bell,
+  Globe, Shield, Receipt, Eye, EyeOff, ExternalLink, ChevronRight,
+  ChevronDown, ChevronUp,
+} from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { BASE_URL } from '../../services/client';
 
-// ─── Frappe REST helpers ───────────────────────────────────────────────────
+// ── Frappe helpers ────────────────────────────────────────────────────────
 
 function csrf(): string {
   return (window as unknown as { frappe?: { csrf_token?: string } }).frappe?.csrf_token || '';
 }
 
 async function ff(path: string, opts: RequestInit = {}) {
-  const isForm = opts.body instanceof FormData;
   const res = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include',
-    headers: { ...(!isForm && { 'Content-Type': 'application/json' }), 'X-Frappe-CSRF-Token': csrf(), ...(opts.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': csrf(), ...(opts.headers || {}) },
     ...opts,
   });
   const json = await res.json().catch(() => ({}));
@@ -25,920 +29,1261 @@ async function ff(path: string, opts: RequestInit = {}) {
 }
 
 async function readDoc(doctype: string): Promise<Record<string, unknown>> {
+  if (doctype === 'Store Settings') {
+    const r = await ff('/api/method/store_customizations.api.store_settings.get');
+    return (r.message || {}) as Record<string, unknown>;
+  }
   const e = encodeURIComponent(doctype);
   return ((await ff(`/api/resource/${e}/${e}`)).data || {}) as Record<string, unknown>;
 }
 
-async function saveDoc(doctype: string, data: Record<string, unknown>) {
+async function saveDoc(doctype: string, data: Record<string, unknown>): Promise<void> {
+  if (doctype === 'Store Settings') {
+    await ff('/api/method/store_customizations.api.store_settings.save', {
+      method: 'POST',
+      body: JSON.stringify({ data: JSON.stringify(data) }),
+    });
+    return;
+  }
   const e = encodeURIComponent(doctype);
   await ff(`/api/resource/${e}/${e}`, { method: 'PUT', body: JSON.stringify({ data }) });
 }
 
-async function uploadAttachment(file: File, doctype: string, docname: string): Promise<{ name: string; file_url: string; file_name: string }> {
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('is_private', '0');
-  fd.append('doctype', doctype);
-  fd.append('docname', docname);
-  const r = await ff('/api/method/upload_file', { method: 'POST', body: fd });
-  return r.message;
-}
+// ── Sections config ───────────────────────────────────────────────────────
 
-async function getAttachments(doctype: string, docname: string) {
-  const f = JSON.stringify([['attached_to_doctype', '=', doctype], ['attached_to_name', '=', docname]]);
-  const fields = JSON.stringify(['name', 'file_name', 'file_url', 'is_private', 'file_size', 'creation']);
-  return (await ff(`/api/resource/File?filters=${encodeURIComponent(f)}&fields=${encodeURIComponent(fields)}`)).data || [];
-}
+const SECTIONS = [
+  { id: 'general',       label: 'General',        icon: <Settings size={15} /> },
+  { id: 'users',         label: 'Users & Roles',  icon: <Users size={15} /> },
+  { id: 'payments',      label: 'Payments',        icon: <CreditCard size={15} /> },
+  { id: 'shipping',      label: 'Shipping',        icon: <Truck size={15} /> },
+  { id: 'orders',        label: 'Orders',          icon: <Package size={15} /> },
+  { id: 'reviews',       label: 'Reviews',         icon: <Star size={15} /> },
+  { id: 'email',         label: 'Email Settings',  icon: <Mail size={15} /> },
+  { id: 'notifications', label: 'Notifications',   icon: <Bell size={15} /> },
+  { id: 'website',       label: 'Website',         icon: <Globe size={15} /> },
+  { id: 'security',      label: 'Security',        icon: <Shield size={15} /> },
+  { id: 'tax',           label: 'Tax',             icon: <Receipt size={15} /> },
+];
 
-async function deleteAttachment(name: string) {
-  await ff(`/api/resource/File/${encodeURIComponent(name)}`, { method: 'DELETE' });
-}
+// ── UI Primitives ─────────────────────────────────────────────────────────
 
-async function getAssignments(doctype: string, name: string) {
-  return (await ff(`/api/method/frappe.desk.form.assign_to.get?doctype=${encodeURIComponent(doctype)}&name=${encodeURIComponent(name)}`)).message || [];
-}
-
-async function addAssignment(doctype: string, name: string, user: string, description?: string) {
-  await ff('/api/method/frappe.desk.form.assign_to.add', {
-    method: 'POST',
-    body: JSON.stringify({ args: { doctype, name, assign_to: [user], description: description || '', date: '' } }),
-  });
-}
-
-async function removeAssignment(doctype: string, name: string, assign_to: string) {
-  await ff('/api/method/frappe.desk.form.assign_to.remove', {
-    method: 'POST',
-    body: JSON.stringify({ doctype, name, assign_to }),
-  });
-}
-
-async function getShares(doctype: string, name: string) {
-  return (await ff(`/api/method/frappe.share.get_users?doctype=${encodeURIComponent(doctype)}&name=${encodeURIComponent(name)}`)).message || [];
-}
-
-async function addShare(doctype: string, name: string, user: string, write: number) {
-  await ff('/api/method/frappe.share.add', {
-    method: 'POST',
-    body: JSON.stringify({ doctype, name, user, read: 1, write, submit: 0, share: 0 }),
-  });
-}
-
-async function removeShare(doctype: string, name: string, user: string) {
-  await ff('/api/method/frappe.share.remove', {
-    method: 'POST',
-    body: JSON.stringify({ doctype, name, user }),
-  });
-}
-
-// ─── Shared UI primitives ──────────────────────────────────────────────────
-
-const I: React.CSSProperties = {
-  width: '100%', padding: '8px 11px', background: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.11)', borderRadius: 7, color: '#e2e8f0',
-  fontSize: 13, outline: 'none', boxSizing: 'border-box',
-};
-const TA: React.CSSProperties = { ...I, minHeight: 96, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 };
-
-function FR({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 5 }}>
-        {label}{hint && <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.25)', marginLeft: 6 }}>{hint}</span>}
-      </label>
+    <div className="settings-card">
+      <div className="settings-card-title">{title}</div>
       {children}
     </div>
   );
 }
 
-function Grid({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>{children}</div>;
+function InfoCard({ children }: { children: React.ReactNode }) {
+  return <div className="settings-info-card">{children}</div>;
 }
 
-function Sec({ title }: { title: string }) {
-  return <div style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 0 8px', margin: '20px 0 12px', borderBottom: '1px solid rgba(99,102,241,0.2)' }}>{title}</div>;
-}
-
-function TI({ v, set, ph }: { v: string; set: (x: string) => void; ph?: string }) {
-  return <input style={I} value={v || ''} onChange={e => set(e.target.value)} placeholder={ph} />;
-}
-function NI({ v, set }: { v: number | string; set: (x: number) => void }) {
-  return <input type="number" style={I} value={v || ''} onChange={e => set(Number(e.target.value))} />;
-}
-function TA_({ v, set, ph }: { v: string; set: (x: string) => void; ph?: string }) {
-  return <textarea style={TA} value={v || ''} onChange={e => set(e.target.value)} placeholder={ph} />;
-}
-function SI({ v, set, opts }: { v: string; set: (x: string) => void; opts: { l: string; v: string }[] }) {
+function FR({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <select style={I} value={v || ''} onChange={e => set(e.target.value)}>
-      <option value="">— select —</option>
-      {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+    <div className="settings-field">
+      <label className="settings-label">{label}</label>
+      {children}
+      {hint && <div className="settings-hint">{hint}</div>}
+    </div>
+  );
+}
+
+function TI({ value, onChange, placeholder, type = 'text' }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  return <input className="settings-input" type={type} value={value || ''} placeholder={placeholder} onChange={e => onChange(e.target.value)} />;
+}
+
+function PI({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input className="settings-input" type={show ? 'text' : 'password'} value={value || ''} placeholder={placeholder} onChange={e => onChange(e.target.value)} style={{ paddingRight: 36 }} />
+      <button onClick={() => setShow(s => !s)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  );
+}
+
+function SI({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <select className="settings-select" value={value || ''} onChange={e => onChange(e.target.value)}>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );
 }
-function CK({ v, set, label }: { v: number | boolean; set: (x: number) => void; label: string }) {
-  const on = !!v;
+
+function Tgl({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
-      <div onClick={() => set(on ? 0 : 1)} style={{ width: 36, height: 20, borderRadius: 10, background: on ? '#6366f1' : 'rgba(255,255,255,0.12)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
-        <div style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
-      </div>
-      <span style={{ fontSize: 13, color: '#cbd5e1' }}>{label}</span>
+    <label className="tgl">
+      <input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)} />
+      <span className="tgl-slider" />
     </label>
   );
 }
 
-function FI({ v, set, doctype, fieldname, label, hint }: { v: string; set: (x: string) => void; doctype: string; fieldname: string; label: string; hint?: string }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const ref = useRef<HTMLInputElement>(null);
-  async function pick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
-    setBusy(true); setErr('');
-    const fd = new FormData(); fd.append('file', file); fd.append('is_private', '0'); fd.append('doctype', doctype); fd.append('fieldname', fieldname);
-    try { const r = await ff('/api/method/upload_file', { method: 'POST', body: fd }); set(r.message?.file_url || ''); }
-    catch (ex) { setErr((ex as Error).message); }
-    finally { setBusy(false); }
-  }
+function TglRow({ label, desc, checked, onChange }: { label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <FR label={label} hint={hint}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        {v && <img src={v.startsWith('http') ? v : `${BASE_URL}${v}`} alt="" style={{ height: 36, width: 'auto', maxWidth: 80, objectFit: 'contain', borderRadius: 5, background: 'rgba(255,255,255,0.06)', padding: 3 }} />}
-        <input style={{ ...I, flex: 1 }} value={v || ''} onChange={e => set(e.target.value)} placeholder="/files/logo.png" />
-        <button type="button" onClick={() => ref.current?.click()} disabled={busy} style={{ padding: '7px 12px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, color: '#818cf8', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>{busy ? '…' : 'Upload'}</button>
-        <input ref={ref} type="file" accept="image/*,.svg,.ico" style={{ display: 'none' }} onChange={pick} />
+    <div className="settings-toggle-row">
+      <div>
+        <div className="settings-toggle-label">{label}</div>
+        {desc && <div className="settings-toggle-desc">{desc}</div>}
       </div>
-      {err && <div style={{ color: '#f87171', fontSize: 11, marginTop: 3 }}>{err}</div>}
-    </FR>
+      <Tgl checked={checked} onChange={onChange} />
+    </div>
   );
 }
 
-// Child table editor
-type Row = Record<string, string | number>;
-interface Col { key: string; label: string; type?: 'text' | 'check' | 'select'; opts?: { l: string; v: string }[] }
-
-function TableEd({ label, hint, rows, cols, onChange }: { label: string; hint?: string; rows: Row[]; cols: Col[]; onChange: (r: Row[]) => void }) {
-  function upd(idx: number, k: string, val: string | number) { onChange(rows.map((r, i) => i === idx ? { ...r, [k]: val } : r)); }
-  function add() { onChange([...rows, Object.fromEntries(cols.map(c => [c.key, c.type === 'check' ? 0 : '']))]); }
-  function del(idx: number) { onChange(rows.filter((_, i) => i !== idx)); }
-
+function ExtBtn({ href, label }: { href: string; label: string }) {
   return (
-    <FR label={label} hint={hint}>
-      <div style={{ border: '1px solid rgba(255,255,255,0.09)', borderRadius: 8, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.05)' }}>
-              {cols.map(c => <th key={c.key} style={{ padding: '7px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.label}</th>)}
-              <th style={{ width: 30 }} />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && <tr><td colSpan={cols.length + 1} style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>No rows</td></tr>}
-            {rows.map((row, idx) => (
-              <tr key={idx} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                {cols.map(c => (
-                  <td key={c.key} style={{ padding: '4px 6px' }}>
-                    {c.type === 'check'
-                      ? <input type="checkbox" checked={!!row[c.key]} onChange={e => upd(idx, c.key, e.target.checked ? 1 : 0)} style={{ accentColor: '#6366f1' }} />
-                      : c.type === 'select' && c.opts
-                        ? <select style={{ ...I, padding: '4px 8px', fontSize: 12 }} value={String(row[c.key] || '')} onChange={e => upd(idx, c.key, e.target.value)}>
-                            {c.opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-                          </select>
-                        : <input style={{ ...I, padding: '4px 8px', fontSize: 12 }} value={String(row[c.key] || '')} onChange={e => upd(idx, c.key, e.target.value)} />
-                    }
-                  </td>
+    <a href={href} target="_blank" rel="noreferrer" className="settings-ext-btn">
+      {label} <ExternalLink size={13} />
+    </a>
+  );
+}
+
+function Grid({ cols = 2, children }: { cols?: number; children: React.ReactNode }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: '0 16px' }}>{children}</div>;
+}
+
+// ── Section components ────────────────────────────────────────────────────
+
+function GeneralSection({ docs, set }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void }) {
+  const ws = docs['Website Settings'] || {};
+  const ss = docs['System Settings'] || {};
+  return (
+    <>
+      <Card title="Store Identity">
+        <FR label="Store Name"><TI value={ws.app_name as string} onChange={v => set('Website Settings', 'app_name', v)} placeholder="SB Store" /></FR>
+        <FR label="Logo URL" hint="Paste image URL or upload via Frappe Files"><TI value={ws.app_logo as string} onChange={v => set('Website Settings', 'app_logo', v)} placeholder="https://..." /></FR>
+      </Card>
+      <Card title="Locale">
+        <FR label="Timezone"><TI value={ss.time_zone as string} onChange={v => set('System Settings', 'time_zone', v)} placeholder="Asia/Kolkata" /></FR>
+        <FR label="Country"><TI value={ss.country as string} onChange={v => set('System Settings', 'country', v)} placeholder="India" /></FR>
+      </Card>
+    </>
+  );
+}
+
+function PaymentsSection({ docs, set }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void }) {
+  const rs = docs['Razorpay Settings'] || {};
+  const ws = docs['Webshop Settings'] || {};
+  const st = docs['Store Settings'] || {};
+  return (
+    <>
+      <Card title="Cash on Delivery">
+        <TglRow label="Enable Cash on Delivery" desc="Allow customers to pay on delivery" checked={!!st.enable_cod} onChange={v => set('Store Settings', 'enable_cod', v ? 1 : 0)} />
+      </Card>
+      <Card title="Razorpay">
+        <FR label="API Key"><TI value={rs.api_key as string} onChange={v => set('Razorpay Settings', 'api_key', v)} placeholder="rzp_live_..." /></FR>
+        <FR label="API Secret"><PI value={rs.api_secret as string} onChange={v => set('Razorpay Settings', 'api_secret', v)} placeholder="••••••••••••••••" /></FR>
+        <FR label="Redirect URL" hint="Page shown after payment completes"><TI value={rs.redirect_to as string} onChange={v => set('Razorpay Settings', 'redirect_to', v)} placeholder="/shop/orders" /></FR>
+      </Card>
+      <Card title="Checkout">
+        <TglRow label="Enable Checkout" checked={!!ws.enable_checkout} onChange={v => set('Webshop Settings', 'enable_checkout', v ? 1 : 0)} />
+        <FR label="Payment Gateway Account" hint="Link to ERPNext Payment Gateway Account"><TI value={ws.payment_gateway_account as string} onChange={v => set('Webshop Settings', 'payment_gateway_account', v)} /></FR>
+        <FR label="Post-Payment Redirect">
+          <SI value={ws.payment_success_url as string || 'Orders'} onChange={v => set('Webshop Settings', 'payment_success_url', v)}
+            options={[{ value: 'Orders', label: 'Orders' }, { value: 'Invoices', label: 'Invoices' }, { value: 'My Account', label: 'My Account' }]} />
+        </FR>
+      </Card>
+    </>
+  );
+}
+
+function ShippingSection({ docs, set, shippingRules }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void; shippingRules: Record<string, unknown>[] }) {
+  const st = docs['Store Settings'] || {};
+  return (
+    <>
+      <Card title="Shipping Rules">
+        {shippingRules.length === 0
+          ? <div style={{ color: '#64748b', fontSize: 13, padding: '8px 0' }}>No shipping rules configured yet.</div>
+          : (
+            <table className="settings-shipping-table">
+              <thead><tr><th>Label</th><th>Type</th><th>Status</th></tr></thead>
+              <tbody>
+                {shippingRules.map((r: Record<string, unknown>) => (
+                  <tr key={r.name as string}>
+                    <td>{r.label as string || r.name as string}</td>
+                    <td>{r.shipping_rule_type as string || '—'}</td>
+                    <td><span className={`settings-badge ${r.disabled ? 'disabled' : 'active'}`}>{r.disabled ? 'Disabled' : 'Active'}</span></td>
+                  </tr>
                 ))}
-                <td style={{ padding: '4px 6px', textAlign: 'center' }}>
-                  <button onClick={() => del(idx)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 15 }}>×</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div style={{ padding: '6px 10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-          <button onClick={add} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, color: 'rgba(255,255,255,0.45)', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>+ Add Row</button>
+              </tbody>
+            </table>
+          )}
+        <div style={{ marginTop: 12 }}>
+          <ExtBtn href="/app/shipping-rule" label="Manage Shipping Rules" />
         </div>
+      </Card>
+      <Card title="Options">
+        <TglRow label="Enable Pincode-based Delivery Check" desc="Validate delivery availability by pincode" checked={!!st.enable_pincode_check} onChange={v => set('Store Settings', 'enable_pincode_check', v ? 1 : 0)} />
+      </Card>
+    </>
+  );
+}
+
+function OrdersSection({ docs, set }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void }) {
+  const sel = docs['Selling Settings'] || {};
+  const st = docs['Store Settings'] || {};
+  return (
+    <>
+      <Card title="Order Workflow">
+        <FR label="Sales Order Required" hint="Must SO be created before Invoice/Delivery Note?">
+          <SI value={sel.so_required as string || 'No'} onChange={v => set('Selling Settings', 'so_required', v)}
+            options={[{ value: 'No', label: 'No' }, { value: 'Yes', label: 'Yes' }]} />
+        </FR>
+        <TglRow label="Auto Confirm Orders" desc="Automatically submit Sales Orders on placement" checked={!!st.auto_confirm_orders} onChange={v => set('Store Settings', 'auto_confirm_orders', v ? 1 : 0)} />
+        <TglRow label="Allow Order Cancellation" desc="Let customers cancel orders before shipping" checked={!!st.allow_cancellation} onChange={v => set('Store Settings', 'allow_cancellation', v ? 1 : 0)} />
+      </Card>
+      <Card title="Returns & Invoicing">
+        <FR label="Return Window (Days)" hint="How many days after delivery a return is allowed">
+          <input className="settings-input" type="number" min={0} value={st.return_window_days as number ?? 7} onChange={e => set('Store Settings', 'return_window_days', parseInt(e.target.value) || 0)} />
+        </FR>
+        <TglRow label="Auto Generate Invoice" desc="Create Sales Invoice automatically on order submission" checked={!!st.invoice_auto_generation} onChange={v => set('Store Settings', 'invoice_auto_generation', v ? 1 : 0)} />
+      </Card>
+    </>
+  );
+}
+
+function ReviewsSection({ docs, set }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void }) {
+  const ws = docs['Webshop Settings'] || {};
+  const st = docs['Store Settings'] || {};
+  return (
+    <Card title="Review Settings">
+      <TglRow label="Enable Reviews & Ratings" desc="Allow customers to leave product reviews" checked={!!ws.enable_reviews} onChange={v => set('Webshop Settings', 'enable_reviews', v ? 1 : 0)} />
+      <TglRow label="Require Approval Before Publishing" desc="Admin must approve reviews before they go live" checked={!!st.require_approval_for_reviews} onChange={v => set('Store Settings', 'require_approval_for_reviews', v ? 1 : 0)} />
+      <TglRow label="Allow Images in Reviews" desc="Customers can attach photos to their reviews" checked={!!st.allow_review_images} onChange={v => set('Store Settings', 'allow_review_images', v ? 1 : 0)} />
+      <FR label="Max Star Rating">
+        <SI value={String(st.max_rating || 5)} onChange={v => set('Store Settings', 'max_rating', parseInt(v))}
+          options={[{ value: '3', label: '3 Stars' }, { value: '4', label: '4 Stars' }, { value: '5', label: '5 Stars' }]} />
+      </FR>
+    </Card>
+  );
+}
+
+function EmailSection({ emailDoc, emailAccName, setEmailField, dirty, onSave, saving }:
+  { emailDoc: Record<string, unknown>; emailAccName: string; setEmailField: (f: string, v: unknown) => void; dirty: boolean; onSave: () => void; saving: boolean }) {
+  return (
+    <>
+      <Card title="SMTP Configuration">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12 }}>
+          <FR label="SMTP Server"><TI value={emailDoc.smtp_server as string} onChange={v => setEmailField('smtp_server', v)} placeholder="smtp.gmail.com" /></FR>
+          <FR label="Port"><input className="settings-input" type="number" value={emailDoc.smtp_port as number || 587} onChange={e => setEmailField('smtp_port', parseInt(e.target.value))} /></FR>
+        </div>
+        <TglRow label="Use TLS" checked={!!emailDoc.use_tls} onChange={v => setEmailField('use_tls', v ? 1 : 0)} />
+        <TglRow label="Use SSL" checked={!!emailDoc.use_ssl} onChange={v => setEmailField('use_ssl', v ? 1 : 0)} />
+      </Card>
+      <Card title="Sender Details">
+        <FR label="Sender Name"><TI value={emailDoc.email_account_name as string} onChange={v => setEmailField('email_account_name', v)} placeholder="SB Store" /></FR>
+        <FR label="Email Address" hint="This is the From address"><TI value={emailDoc.email_id as string} onChange={v => setEmailField('email_id', v)} placeholder="store@example.com" /></FR>
+        <FR label="Always Send From This Address">
+          <TglRow label="" checked={!!emailDoc.always_use_account_email_id_as_sender} onChange={v => setEmailField('always_use_account_email_id_as_sender', v ? 1 : 0)} />
+        </FR>
+      </Card>
+      <Card title="Authentication">
+        <FR label="Password"><PI value={emailDoc.password as string} onChange={v => setEmailField('password', v)} placeholder="App password or SMTP password" /></FR>
+      </Card>
+      {!emailAccName && (
+        <InfoCard>
+          No default outgoing email account configured. <ExtBtn href="/app/email-account/new" label="Create Email Account" />
+        </InfoCard>
+      )}
+      {dirty && (
+        <div className="settings-save-bar">
+          <span style={{ color: '#64748b', fontSize: 13 }}>Unsaved changes</span>
+          <button className="admin-btn-primary" onClick={onSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function NotificationsSection({ notifications, onToggle, smsDocs, setSmsField }:
+  { notifications: Record<string, unknown>[]; onToggle: (name: string, enabled: boolean) => void; smsDocs: Record<string, unknown>; setSmsField: (f: string, v: unknown) => void }) {
+  return (
+    <>
+      <Card title="Email & SMS Notifications">
+        {notifications.length === 0
+          ? <div style={{ color: '#64748b', fontSize: 13 }}>No store notifications found. <ExtBtn href="/app/notification/new" label="Create Notification" /></div>
+          : (
+            <table className="settings-shipping-table">
+              <thead><tr><th>Notification</th><th>Document</th><th>Event</th><th>Channel</th><th>Enabled</th><th></th></tr></thead>
+              <tbody>
+                {notifications.map((n: Record<string, unknown>) => (
+                  <tr key={n.name as string}>
+                    <td>{n.subject as string || n.name as string}</td>
+                    <td style={{ fontSize: 12, color: '#64748b' }}>{n.document_type as string}</td>
+                    <td style={{ fontSize: 12, color: '#64748b' }}>{n.event as string}</td>
+                    <td><span className="settings-badge active">{n.channel as string}</span></td>
+                    <td><Tgl checked={!!n.enabled} onChange={v => onToggle(n.name as string, v)} /></td>
+                    <td>
+                      <a href={`/app/notification/${encodeURIComponent(n.name as string)}`} target="_blank" rel="noreferrer" style={{ color: '#64748b' }}>
+                        <ExternalLink size={14} />
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        <div style={{ marginTop: 12 }}>
+          <ExtBtn href="/app/notification/new" label="Add Notification" />
+        </div>
+      </Card>
+      <Card title="SMS Gateway">
+        <FR label="Gateway URL" hint="Full URL of your SMS provider's API endpoint">
+          <TI value={smsDocs.sms_gateway_url as string} onChange={v => setSmsField('sms_gateway_url', v)} placeholder="https://api.smsprovider.com/send" />
+        </FR>
+        <FR label="Message Parameter" hint="URL parameter name for message content"><TI value={smsDocs.message_parameter as string} onChange={v => setSmsField('message_parameter', v)} placeholder="message" /></FR>
+        <FR label="Receiver Parameter" hint="URL parameter name for phone number"><TI value={smsDocs.receiver_parameter as string} onChange={v => setSmsField('receiver_parameter', v)} placeholder="to" /></FR>
+        <TglRow label="Use POST method" checked={!!smsDocs.use_post} onChange={v => setSmsField('use_post', v ? 1 : 0)} />
+      </Card>
+    </>
+  );
+}
+
+function WebsiteSection({ docs, set }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void }) {
+  const ws = docs['Website Settings'] || {};
+  const wbs = docs['Webshop Settings'] || {};
+  return (
+    <>
+      <Card title="Branding">
+        <FR label="App / Store Name"><TI value={ws.app_name as string} onChange={v => set('Website Settings', 'app_name', v)} /></FR>
+        <FR label="Logo URL"><TI value={ws.app_logo as string} onChange={v => set('Website Settings', 'app_logo', v)} placeholder="https://..." /></FR>
+        <FR label="Home Page" hint="Default landing page path"><TI value={ws.home_page as string} onChange={v => set('Website Settings', 'home_page', v)} placeholder="shop" /></FR>
+        <FR label="Google Analytics ID"><TI value={ws.google_analytics_id as string} onChange={v => set('Website Settings', 'google_analytics_id', v)} placeholder="G-XXXXXXXXXX" /></FR>
+      </Card>
+      <Card title="Store Display">
+        <FR label="Products Per Page">
+          <input className="settings-input" type="number" min={1} max={100} value={wbs.products_per_page as number || 12} onChange={e => set('Webshop Settings', 'products_per_page', parseInt(e.target.value))} />
+        </FR>
+        <TglRow label="Show Product Prices" checked={!!wbs.show_price} onChange={v => set('Webshop Settings', 'show_price', v ? 1 : 0)} />
+        <TglRow label="Hide Price for Guests" desc="Require login to see prices" checked={!!wbs.hide_price_for_guest} onChange={v => set('Webshop Settings', 'hide_price_for_guest', v ? 1 : 0)} />
+        <TglRow label="Enable Wishlist" checked={!!wbs.enable_wishlist} onChange={v => set('Webshop Settings', 'enable_wishlist', v ? 1 : 0)} />
+        <TglRow label="Enable Product Recommendations" checked={!!wbs.enable_recommendations} onChange={v => set('Webshop Settings', 'enable_recommendations', v ? 1 : 0)} />
+      </Card>
+    </>
+  );
+}
+
+function SecuritySection({ docs, set }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void }) {
+  const ss = docs['System Settings'] || {};
+  return (
+    <>
+      <Card title="Two-Factor Authentication">
+        <TglRow label="Enable 2FA" desc="Require a second verification step on login" checked={!!ss.enable_two_factor_auth} onChange={v => set('System Settings', 'enable_two_factor_auth', v ? 1 : 0)} />
+        <FR label="2FA Method">
+          <SI value={ss.two_factor_method as string || 'OTP App'} onChange={v => set('System Settings', 'two_factor_method', v)}
+            options={[{ value: 'OTP App', label: 'OTP App (Google Authenticator)' }, { value: 'SMS', label: 'SMS' }, { value: 'Email', label: 'Email' }]} />
+        </FR>
+      </Card>
+      <Card title="Session">
+        <FR label="Session Expiry" hint="Format: HH:MM (idle timeout)"><TI value={ss.session_expiry as string} onChange={v => set('System Settings', 'session_expiry', v)} placeholder="06:00" /></FR>
+        <TglRow label="Allow Only One Session per User" desc="Deny simultaneous logins from multiple devices" checked={!!ss.deny_multiple_sessions} onChange={v => set('System Settings', 'deny_multiple_sessions', v ? 1 : 0)} />
+      </Card>
+      <Card title="Password Policy">
+        <TglRow label="Enable Password Policy" checked={!!ss.enable_password_policy} onChange={v => set('System Settings', 'enable_password_policy', v ? 1 : 0)} />
+        <FR label="Minimum Password Strength">
+          <SI value={String(ss.minimum_password_score || 2)} onChange={v => set('System Settings', 'minimum_password_score', v)}
+            options={[{ value: '1', label: 'Very Weak' }, { value: '2', label: 'Medium' }, { value: '3', label: 'Strong' }, { value: '4', label: 'Very Strong' }]} />
+        </FR>
+        <FR label="Max Consecutive Login Attempts" hint="Lock account after N failed attempts">
+          <input className="settings-input" type="number" min={1} value={ss.allow_consecutive_login_attempts as number || 10} onChange={e => set('System Settings', 'allow_consecutive_login_attempts', parseInt(e.target.value))} />
+        </FR>
+      </Card>
+    </>
+  );
+}
+
+function TaxSection({ docs, set }: { docs: Record<string, Record<string, unknown>>; set: (dt: string, f: string, v: unknown) => void }) {
+  const as_ = docs['Accounts Settings'] || {};
+  return (
+    <>
+      <Card title="Tax Rules">
+        <FR label="Determine Tax Category From">
+          <SI value={as_.determine_address_tax_category_from as string || 'Billing Address'} onChange={v => set('Accounts Settings', 'determine_address_tax_category_from', v)}
+            options={[{ value: 'Billing Address', label: 'Billing Address' }, { value: 'Shipping Address', label: 'Shipping Address' }]} />
+        </FR>
+        <TglRow label="Auto-add Taxes from Item Tax Template" desc="Automatically apply item-level tax templates on transactions" checked={!!as_.add_taxes_from_item_tax_template} onChange={v => set('Accounts Settings', 'add_taxes_from_item_tax_template', v ? 1 : 0)} />
+        <TglRow label="Show Inclusive Tax in Print" checked={!!as_.show_inclusive_tax_in_print} onChange={v => set('Accounts Settings', 'show_inclusive_tax_in_print', v ? 1 : 0)} />
+      </Card>
+      <InfoCard>
+        <strong>Product-wise Tax Rules</strong> are managed via ERPNext Item Tax Templates.
+        <div style={{ marginTop: 8 }}><ExtBtn href="/app/item-tax-template" label="Manage Item Tax Templates" /></div>
+      </InfoCard>
+    </>
+  );
+}
+
+const EMPTY_ADD_FORM = {
+  first_name: '', middle_name: '', last_name: '', email: '', username: '',
+  mobile_no: '', phone: '', gender: '', birth_date: '', location: '', bio: '',
+  user_type: 'System User', new_password: '', send_welcome_email: true,
+  language: '', time_zone: '', desk_theme: 'Light',
+  roles: [] as string[],
+};
+
+type UserDoc = Record<string, unknown>;
+
+function RoleSelector({ selected, available, onChange }: { selected: string[]; available: string[]; onChange: (r: string[]) => void }) {
+  const [q, setQ] = useState('');
+  const filtered = available.filter(r => r.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <>
+      <input className="settings-input" style={{ marginBottom: 8 }} placeholder="Search roles…" value={q} onChange={e => setQ(e.target.value)} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 160, overflowY: 'auto', padding: '2px 0' }}>
+        {filtered.map(r => {
+          const on = selected.includes(r);
+          return (
+            <button key={r} type="button"
+              onClick={() => onChange(on ? selected.filter(x => x !== r) : [...selected, r])}
+              style={{
+                padding: '3px 10px', borderRadius: 20, fontSize: 12, cursor: 'pointer', border: '1px solid',
+                borderColor: on ? '#2563eb' : '#e2e8f0',
+                background: on ? '#2563eb' : 'transparent',
+                color: on ? '#fff' : '#1e293b', fontWeight: on ? 600 : 400,
+              }}
+            >{r}</button>
+          );
+        })}
+        {filtered.length === 0 && <span style={{ fontSize: 12, color: '#64748b' }}>No roles found</span>}
       </div>
-    </FR>
+    </>
   );
 }
 
-// Tab bar
-function Tabs<T extends string>({ tabs, active, set }: { tabs: T[]; active: T; set: (t: T) => void }) {
-  return (
-    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(255,255,255,0.07)', marginBottom: 20, flexWrap: 'wrap' }}>
-      {tabs.map(t => (
-        <button key={t} onClick={() => set(t)} style={{
-          padding: '8px 16px', background: 'none', border: 'none',
-          borderBottom: active === t ? '2px solid #6366f1' : '2px solid transparent',
-          color: active === t ? '#818cf8' : 'rgba(255,255,255,0.4)',
-          fontSize: 13, fontWeight: active === t ? 700 : 400, cursor: 'pointer', marginBottom: -1,
-        }}>{t}</button>
-      ))}
-    </div>
-  );
-}
-
-// Top Bar Item columns
-const TOP_BAR_COLS: Col[] = [
-  { key: 'label', label: 'Label' },
-  { key: 'url', label: 'URL' },
-  { key: 'parent_label', label: 'Parent Label' },
-  { key: 'right', label: 'Right', type: 'check' },
-  { key: 'open_in_new_tab', label: 'New Tab', type: 'check' },
-];
-
-// Website Route Redirect columns
-const REDIRECT_COLS: Col[] = [
-  { key: 'source', label: 'Source (old URL)' },
-  { key: 'target', label: 'Target (new URL)' },
-  { key: 'redirect_http_status', label: 'Status', type: 'select', opts: [{ l: '301 Permanent', v: '301' }, { l: '302 Temporary', v: '302' }] },
-];
-
-// ─── Website Settings form ─────────────────────────────────────────────────
-
-type WSTab = 'Details' | 'Integrations' | 'Header, Robots' | 'Footer' | 'Redirects';
-const WS_TABS: WSTab[] = ['Details', 'Integrations', 'Header, Robots', 'Footer', 'Redirects'];
-
-function WebsiteForm({ d, s }: { d: Record<string, unknown>; s: (k: string, v: unknown) => void }) {
-  const [tab, setTab] = useState<WSTab>('Details');
-  const str = (k: string) => String(d[k] || '');
-  const num = (k: string) => Number(d[k] || 0);
-  const rows = (k: string): Row[] => Array.isArray(d[k]) ? d[k] as Row[] : [];
-
+function UserNotificationsFields({ d, f }: { d: UserDoc; f: (k: string, v: unknown) => void }) {
   return (
     <>
-      <Tabs tabs={WS_TABS} active={tab} set={setTab} />
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Email &amp; Notifications</div>
+      <TglRow label="Send Me A Copy of Outgoing Emails" checked={!!d.send_me_a_copy} onChange={v => f('send_me_a_copy', v ? 1 : 0)} />
+      <TglRow label="Allowed In Mentions" checked={!!d.allowed_in_mentions} onChange={v => f('allowed_in_mentions', v ? 1 : 0)} />
+      <TglRow label="Send Notifications For Email Threads" checked={!!d.thread_notify} onChange={v => f('thread_notify', v ? 1 : 0)} />
+      <TglRow label="Send Notifications For Documents Followed By Me" checked={!!d.document_follow_notify} onChange={v => f('document_follow_notify', v ? 1 : 0)} />
+      <FR label="Document Follow Frequency">
+        <SI value={d.document_follow_frequency as string || 'Daily'} onChange={v => f('document_follow_frequency', v)}
+          options={[{ value: 'Daily', label: 'Daily' }, { value: 'Weekly', label: 'Weekly' }, { value: 'Realtime', label: 'Realtime' }]} />
+      </FR>
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Auto Follow Documents</div>
+      <TglRow label="Auto follow documents that you create" checked={!!d.follow_created_documents} onChange={v => f('follow_created_documents', v ? 1 : 0)} />
+      <TglRow label="Auto follow documents that you comment on" checked={!!d.follow_commented_documents} onChange={v => f('follow_commented_documents', v ? 1 : 0)} />
+      <TglRow label="Auto follow documents that you Like" checked={!!d.follow_liked_documents} onChange={v => f('follow_liked_documents', v ? 1 : 0)} />
+      <TglRow label="Auto follow documents assigned to you" checked={!!d.follow_assigned_documents} onChange={v => f('follow_assigned_documents', v ? 1 : 0)} />
+      <TglRow label="Auto follow documents shared with you" checked={!!d.follow_shared_documents} onChange={v => f('follow_shared_documents', v ? 1 : 0)} />
+    </>
+  );
+}
 
-      {/* ── Details (Main tab — before first Tab Break) ── */}
-      {tab === 'Details' && <>
-        <Sec title="Landing Page" />
-        <Grid>
-          <FR label="Home Page"><TI v={str('home_page')} set={v => s('home_page', v)} ph="home" /></FR>
-          <FR label="Title Prefix"><TI v={str('title_prefix')} set={v => s('title_prefix', v)} /></FR>
-        </Grid>
-
-        <Sec title="Theme" />
-        <FR label="Website Theme" hint="Link to Website Theme doctype"><TI v={str('website_theme')} set={v => s('website_theme', v)} /></FR>
-
-        <Sec title="Brand" />
-        <FI v={str('banner_image')} set={v => s('banner_image', v)} doctype="Website Settings" fieldname="banner_image" label="Brand Image" hint="Logo shown in navbar" />
-        <FR label="Brand HTML" hint="Custom HTML for brand area — overrides Brand Image"><TA_ v={str('brand_html')} set={v => s('brand_html', v)} ph='<img src="/files/logo.png" alt="My Store" />' /></FR>
-
-        <Sec title="Navbar" />
-        <CK v={num('navbar_search')} set={v => s('navbar_search', v)} label="Include Search in Top Bar" />
-        <TableEd label="Top Bar Items" rows={rows('top_bar_items')} cols={TOP_BAR_COLS} onChange={v => s('top_bar_items', v)} />
-
-        <Sec title="Banner" />
-        <FR label="Banner HTML" hint="HTML shown in a site-wide banner strip"><TA_ v={str('banner_html')} set={v => s('banner_html', v)} /></FR>
-
-        <Sec title="Footer Items" />
-        <Grid>
-          <FR label="Copyright"><TI v={str('copyright')} set={v => s('copyright', v)} ph="© 2025 My Store" /></FR>
-          <FR label="Address"><TI v={str('address')} set={v => s('address', v)} /></FR>
-        </Grid>
-        <TableEd label="Footer Items" rows={rows('footer_items')} cols={TOP_BAR_COLS} onChange={v => s('footer_items', v)} />
-        <CK v={num('hide_footer_signup')} set={v => s('hide_footer_signup', v)} label="Hide Footer Signup" />
-      </>}
-
-      {/* ── Integrations ── */}
-      {tab === 'Integrations' && <>
-        <Sec title="Analytics" />
-        <Grid>
-          <FR label="Google Analytics ID" hint="e.g. G-XXXXXXXXXX">
-            <TI v={str('google_analytics_id')} set={v => s('google_analytics_id', v)} ph="G-XXXXXXXXXX" />
-          </FR>
-          <div />
-        </Grid>
-        <CK v={num('google_analytics_anonymize_ip')} set={v => s('google_analytics_anonymize_ip', v)} label="Anonymise IP in Google Analytics" />
-        <CK v={num('enable_view_tracking')} set={v => s('enable_view_tracking', v)} label="Enable in-app website tracking" />
-
-        <Sec title="Login Page" />
-        <FI v={str('favicon')} set={v => s('favicon', v)} doctype="Website Settings" fieldname="favicon" label="FavIcon" hint=".ico or .png shown in browser tab" />
-        <FR label="Subdomain"><TI v={str('subdomain')} set={v => s('subdomain', v)} /></FR>
-        <CK v={num('disable_signup')} set={v => s('disable_signup', v)} label="Disable Signups" />
-      </>}
-
-      {/* ── Header, Robots ── */}
-      {tab === 'Header, Robots' && <>
-        <Sec title="Custom Scripts" />
-        <FR label="&lt;head&gt; HTML" hint="Injected inside <head> on every page"><TA_ v={str('head_html')} set={v => s('head_html', v)} ph="<!-- analytics, meta tags -->" /></FR>
-
-        <Sec title="Robots & Crawlers" />
-        <FR label="Robots.txt" hint="Served at /robots.txt"><TA_ v={str('robots_txt')} set={v => s('robots_txt', v)} ph={'User-agent: *\nAllow: /'} /></FR>
-        <CK v={num('enable_google_indexing')} set={v => s('enable_google_indexing', v)} label="Enable Google Indexing API" />
-        {num('enable_google_indexing') ? <>
+function UserSecurityFields({ d, f }: { d: UserDoc; f: (k: string, v: unknown) => void }) {
+  return (
+    <>
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Login &amp; Security</div>
+      <Grid>
+        <FR label="Simultaneous Sessions" hint="Max concurrent login sessions (0 = unlimited)">
+          <input className="settings-input" type="number" min={0} value={(d.simultaneous_sessions as number) ?? 0} onChange={e => f('simultaneous_sessions', parseInt(e.target.value) || 0)} />
+        </FR>
+        <FR label="Login After (Hours)" hint="Allow login only after this hour">
+          <input className="settings-input" type="number" min={0} max={24} value={(d.login_after as number) ?? 0} onChange={e => f('login_after', parseInt(e.target.value) || 0)} />
+        </FR>
+        <FR label="Login Before (Hours)" hint="Allow login only before this hour">
+          <input className="settings-input" type="number" min={0} max={24} value={(d.login_before as number) ?? 0} onChange={e => f('login_before', parseInt(e.target.value) || 0)} />
+        </FR>
+      </Grid>
+      <FR label="Restrict IP" hint="Comma-separated IPs allowed to login from">
+        <textarea className="settings-input" rows={2} value={d.restrict_ip as string || ''} onChange={e => f('restrict_ip', e.target.value)} placeholder="192.168.1.1, 10.0.0.1" style={{ resize: 'vertical' }} />
+      </FR>
+      <TglRow label="Bypass IP Restriction if Two-Factor Auth Enabled" checked={!!d.bypass_restrict_ip_check_if_2fa_enabled} onChange={v => f('bypass_restrict_ip_check_if_2fa_enabled', v ? 1 : 0)} />
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Login History</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px 20px', fontSize: 12, marginBottom: 16 }}>
+        {([['Last Login', d.last_login as string], ['Last Active', d.last_active as string], ['Last IP', d.last_ip as string]] as [string, string][]).map(([lbl, val]) => (
+          <div key={lbl}>
+            <div style={{ color: '#64748b', marginBottom: 2 }}>{lbl}</div>
+            <div style={{ color: '#1e293b', fontWeight: 500 }}>{val || '—'}</div>
+          </div>
+        ))}
+      </div>
+      {d.api_key != null && d.api_key !== '' && (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>API Access</div>
           <Grid>
-            <FR label="Indexing Refresh Token"><TI v={str('indexing_refresh_token')} set={v => s('indexing_refresh_token', v)} /></FR>
-            <FR label="Indexing Authorization Code"><TI v={str('indexing_authorization_code')} set={v => s('indexing_authorization_code', v)} /></FR>
+            <FR label="API Key"><TI value={d.api_key as string} onChange={v => f('api_key', v)} /></FR>
           </Grid>
-        </> : null}
-
-        <Sec title="Visibility & Language" />
-        <CK v={num('hide_login')} set={v => s('hide_login', v)} label="Hide Login Button" />
-        <CK v={num('show_language_picker')} set={v => s('show_language_picker', v)} label="Show Language Picker" />
-
-        <Sec title="Call To Action" />
-        <Grid>
-          <FR label="Call To Action Text"><TI v={str('call_to_action')} set={v => s('call_to_action', v)} ph="Get Started" /></FR>
-          <FR label="Call To Action URL"><TI v={str('call_to_action_url')} set={v => s('call_to_action_url', v)} ph="/signup" /></FR>
-        </Grid>
-
-        <Sec title="Navbar Template" />
-        <Grid>
-          <FR label="App Name"><TI v={str('app_name')} set={v => s('app_name', v)} ph="SB Store" /></FR>
-          <div />
-        </Grid>
-        <FI v={str('app_logo')} set={v => s('app_logo', v)} doctype="Website Settings" fieldname="app_logo" label="App Logo" hint="Shown in navbar and admin panel" />
-        <Grid>
-          <FR label="Navbar Template" hint="Link to Web Template doctype"><TI v={str('navbar_template')} set={v => s('navbar_template', v)} /></FR>
-          <FR label="Footer Template" hint="Link to Web Template doctype"><TI v={str('footer_template')} set={v => s('footer_template', v)} /></FR>
-        </Grid>
-        <Grid>
-          <FR label="Navbar Template Values" hint="JSON">
-            <TA_ v={str('navbar_template_values')} set={v => s('navbar_template_values', v)} ph='{"key": "value"}' />
-          </FR>
-          <FR label="Footer Template Values" hint="JSON">
-            <TA_ v={str('footer_template_values')} set={v => s('footer_template_values', v)} ph='{"key": "value"}' />
-          </FR>
-        </Grid>
-
-        <Sec title="Footer" />
-        <FI v={str('footer_logo')} set={v => s('footer_logo', v)} doctype="Website Settings" fieldname="footer_logo" label="Footer Logo" />
-        <FR label='Footer "Powered By"' hint="HTML snippet"><TA_ v={str('footer_powered')} set={v => s('footer_powered', v)} ph='Powered by <a href="...">Frappe</a>' /></FR>
-        <FI v={str('splash_image')} set={v => s('splash_image', v)} doctype="Website Settings" fieldname="splash_image" label="Splash Image" />
-
-        <Sec title="Account Deletion" />
-        <CK v={num('show_account_deletion_link')} set={v => s('show_account_deletion_link', v)} label="Show account deletion link in My Account page" />
-        <FR label="Auto-delete account within (hours)"><NI v={num('auto_account_deletion')} set={v => s('auto_account_deletion', v)} /></FR>
-      </>}
-
-      {/* ── Footer ── */}
-      {tab === 'Footer' && <>
-        <Sec title="Footer Details" />
-        <Grid>
-          <FR label="Copyright"><TI v={str('copyright')} set={v => s('copyright', v)} ph="© 2025 My Store" /></FR>
-          <FR label="Address"><TI v={str('address')} set={v => s('address', v)} /></FR>
-        </Grid>
-        <FI v={str('footer_logo')} set={v => s('footer_logo', v)} doctype="Website Settings" fieldname="footer_logo" label="Footer Logo" />
-        <FR label='Footer "Powered By"'><TA_ v={str('footer_powered')} set={v => s('footer_powered', v)} ph='Powered by <a href="...">Frappe</a>' /></FR>
-        <CK v={num('hide_footer_signup')} set={v => s('hide_footer_signup', v)} label="Hide Footer Signup" />
-        <CK v={num('show_footer_on_login')} set={v => s('show_footer_on_login', v)} label="Show Footer on Login Page" />
-
-        <Sec title="Footer Items" />
-        <TableEd label="Footer Links" rows={rows('footer_items')} cols={TOP_BAR_COLS} onChange={v => s('footer_items', v)} />
-
-        <Sec title="Footer Template" />
-        <Grid>
-          <FR label="Footer Template"><TI v={str('footer_template')} set={v => s('footer_template', v)} /></FR>
-          <FR label="Footer Template Values (JSON)"><TA_ v={str('footer_template_values')} set={v => s('footer_template_values', v)} /></FR>
-        </Grid>
-      </>}
-
-      {/* ── Redirects ── */}
-      {tab === 'Redirects' && <>
-        <Sec title="Route Redirects" />
-        <TableEd label="Redirects" hint="Map old URLs to new ones" rows={rows('route_redirects')} cols={REDIRECT_COLS} onChange={v => s('route_redirects', v)} />
-
-        <Sec title="Analytics" />
-        <CK v={num('show_footer_on_login')} set={v => s('show_footer_on_login', v)} label="Show Footer on Login Page" />
-      </>}
-    </>
-  );
-}
-
-// ─── System Settings form ──────────────────────────────────────────────────
-
-type SSTab = 'Localization' | 'Security' | 'Password' | 'Email' | 'Files' | 'Backups';
-const SS_TABS: SSTab[] = ['Localization', 'Security', 'Password', 'Email', 'Files', 'Backups'];
-
-function SystemForm({ d, s }: { d: Record<string, unknown>; s: (k: string, v: unknown) => void }) {
-  const [tab, setTab] = useState<SSTab>('Localization');
-  const str = (k: string) => String(d[k] || '');
-  const num = (k: string) => Number(d[k] || 0);
-
-  return (
-    <>
-      <Tabs tabs={SS_TABS} active={tab} set={setTab} />
-      {tab === 'Localization' && <>
-        <Sec title="Region" />
-        <Grid>
-          <FR label="Country"><TI v={str('country')} set={v => s('country', v)} /></FR>
-          <FR label="Language"><TI v={str('language')} set={v => s('language', v)} /></FR>
-        </Grid>
-        <Grid>
-          <FR label="Time Zone"><TI v={str('time_zone')} set={v => s('time_zone', v)} ph="Asia/Kolkata" /></FR>
-          <FR label="First Day of the Week">
-            <SI v={str('first_day_of_the_week')} set={v => s('first_day_of_the_week', v)} opts={['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(x => ({ l: x, v: x }))} />
-          </FR>
-        </Grid>
-        <Sec title="Formats" />
-        <Grid>
-          <FR label="Date Format">
-            <SI v={str('date_format')} set={v => s('date_format', v)} opts={['dd-mm-yyyy','mm-dd-yyyy','yyyy-mm-dd','dd/mm/yyyy','mm/dd/yyyy','dd.mm.yyyy'].map(x => ({ l: x, v: x }))} />
-          </FR>
-          <FR label="Time Format">
-            <SI v={str('time_format')} set={v => s('time_format', v)} opts={['HH:mm:ss','hh:mm:ss'].map(x => ({ l: x, v: x }))} />
-          </FR>
-        </Grid>
-        <Grid>
-          <FR label="Number Format">
-            <SI v={str('number_format')} set={v => s('number_format', v)} opts={['#,###.##','#.###,##','# ###.##',"#'###.##",'#,##,###.##'].map(x => ({ l: x, v: x }))} />
-          </FR>
-          <FR label="Float Precision">
-            <SI v={str('float_precision')} set={v => s('float_precision', v)} opts={['2','3','4','5','6','7','8','9'].map(x => ({ l: x, v: x }))} />
-          </FR>
-        </Grid>
-        <FR label="Currency Precision">
-          <SI v={str('currency_precision')} set={v => s('currency_precision', v)} opts={['0','1','2','3','4','5','6','7','8','9'].map(x => ({ l: x, v: x }))} />
-        </FR>
-      </>}
-      {tab === 'Security' && <>
-        <Sec title="Session" />
-        <Grid>
-          <FR label="Session Expiry (idle)" hint="e.g. 06:00:00"><TI v={str('session_expiry')} set={v => s('session_expiry', v)} ph="06:00:00" /></FR>
-          <FR label="Consecutive Login Attempts"><NI v={num('allow_consecutive_login_attempts')} set={v => s('allow_consecutive_login_attempts', v)} /></FR>
-        </Grid>
-        <Grid>
-          <FR label="Allow Login After Fail (min)"><NI v={num('allow_login_after_fail')} set={v => s('allow_login_after_fail', v)} /></FR>
-          <div />
-        </Grid>
-        <Sec title="Login Methods" />
-        <CK v={num('deny_multiple_sessions')} set={v => s('deny_multiple_sessions', v)} label="Allow only one session per user" />
-        <CK v={num('allow_login_using_mobile_number')} set={v => s('allow_login_using_mobile_number', v)} label="Allow Login using Mobile Number" />
-        <CK v={num('allow_login_using_user_name')} set={v => s('allow_login_using_user_name', v)} label="Allow Login using Username" />
-        <CK v={num('disable_user_pass_login')} set={v => s('disable_user_pass_login', v)} label="Disable Username/Password Login" />
-        <CK v={num('login_with_email_link')} set={v => s('login_with_email_link', v)} label="Login with Email Link (Magic Link)" />
-        <Sec title="Two-Factor Authentication" />
-        <CK v={num('enable_two_factor_auth')} set={v => s('enable_two_factor_auth', v)} label="Enable Two Factor Auth" />
-        <CK v={num('bypass_2fa_for_retricted_ip_users')} set={v => s('bypass_2fa_for_retricted_ip_users', v)} label="Bypass 2FA for restricted IP users" />
-        <Sec title="Permissions" />
-        <CK v={num('apply_strict_user_permissions')} set={v => s('apply_strict_user_permissions', v)} label="Apply Strict User Permissions" />
-        <CK v={num('allow_error_traceback')} set={v => s('allow_error_traceback', v)} label="Show Full Error Traceback" />
-        <CK v={num('disable_document_sharing')} set={v => s('disable_document_sharing', v)} label="Disable Document Sharing" />
-      </>}
-      {tab === 'Password' && <>
-        <Sec title="Password Policy" />
-        <CK v={num('enable_password_policy')} set={v => s('enable_password_policy', v)} label="Enable Password Policy" />
-        <FR label="Minimum Password Score">
-          <SI v={str('minimum_password_score')} set={v => s('minimum_password_score', v)} opts={['2 - Good','3 - Strong','4 - Very Strong'].map(x => ({ l: x, v: x }))} />
-        </FR>
-        <Grid>
-          <FR label="Force Reset Password (days)"><NI v={num('force_user_to_reset_password')} set={v => s('force_user_to_reset_password', v)} /></FR>
-          <FR label="Password Reset Link Limit"><NI v={num('password_reset_limit')} set={v => s('password_reset_limit', v)} /></FR>
-        </Grid>
-        <CK v={num('logout_on_password_reset')} set={v => s('logout_on_password_reset', v)} label="Logout All Sessions on Password Reset" />
-      </>}
-      {tab === 'Email' && <>
-        <Sec title="Email Footer" />
-        <FR label="Email Footer Address"><TA_ v={str('email_footer_address')} set={v => s('email_footer_address', v)} ph="Company Name&#10;Address, City" /></FR>
-        <CK v={num('disable_standard_email_footer')} set={v => s('disable_standard_email_footer', v)} label="Disable Standard Email Footer" />
-        <CK v={num('hide_footer_in_auto_email_reports')} set={v => s('hide_footer_in_auto_email_reports', v)} label="Hide Footer in Auto Email Reports" />
-        <CK v={num('attach_view_link')} set={v => s('attach_view_link', v)} label="Include Web View Link in Emails" />
-      </>}
-      {tab === 'Files' && <>
-        <Sec title="File Uploads" />
-        <Grid>
-          <FR label="Max File Size (MB)"><NI v={num('max_file_size')} set={v => s('max_file_size', v)} /></FR>
-          <div />
-        </Grid>
-        <FR label="Allowed File Extensions" hint="Comma-separated"><TA_ v={str('allowed_file_extensions')} set={v => s('allowed_file_extensions', v)} ph="jpg, jpeg, png, gif, pdf, doc, xls" /></FR>
-        <CK v={num('allow_guests_to_upload_files')} set={v => s('allow_guests_to_upload_files', v)} label="Allow Guests to Upload Files" />
-        <CK v={num('strip_exif_metadata_from_uploaded_images')} set={v => s('strip_exif_metadata_from_uploaded_images', v)} label="Strip EXIF Metadata from Uploaded Images" />
-      </>}
-      {tab === 'Backups' && <>
-        <Sec title="Backup Configuration" />
-        <Grid>
-          <FR label="Number of Backups to Keep"><NI v={num('backup_limit')} set={v => s('backup_limit', v)} /></FR>
-          <div />
-        </Grid>
-        <CK v={num('encrypt_backup')} set={v => s('encrypt_backup', v)} label="Encrypt Backups" />
-        <CK v={num('enable_scheduler')} set={v => s('enable_scheduler', v)} label="Enable Scheduled Jobs" />
-      </>}
-    </>
-  );
-}
-
-// ─── Selling Settings form ────────────────────────────────────────────────
-
-type SelTab = 'Customer Defaults' | 'Transaction Settings';
-const SEL_TABS: SelTab[] = ['Customer Defaults', 'Transaction Settings'];
-
-function SellingForm({ d, s }: { d: Record<string, unknown>; s: (k: string, v: unknown) => void }) {
-  const [tab, setTab] = useState<SelTab>('Customer Defaults');
-  const str = (k: string) => String(d[k] || '');
-  const num = (k: string) => Number(d[k] || 0);
-  return (
-    <>
-      <Tabs tabs={SEL_TABS} active={tab} set={setTab} />
-      {tab === 'Customer Defaults' && <>
-        <Sec title="Naming" />
-        <FR label="Customer Naming By">
-          <SI v={str('cust_master_name')} set={v => s('cust_master_name', v)} opts={[{ l: 'Customer Name', v: 'Customer Name' }, { l: 'Naming Series', v: 'Naming Series' }]} />
-        </FR>
-        <Sec title="Defaults" />
-        <Grid>
-          <FR label="Default Customer Group"><TI v={str('customer_group')} set={v => s('customer_group', v)} ph="All Customer Groups" /></FR>
-          <FR label="Default Territory"><TI v={str('territory')} set={v => s('territory', v)} ph="All Territories" /></FR>
-        </Grid>
-        <FR label="Default Price List"><TI v={str('selling_price_list')} set={v => s('selling_price_list', v)} ph="Standard Selling" /></FR>
-      </>}
-      {tab === 'Transaction Settings' && <>
-        <Sec title="Validation" />
-        <CK v={num('maintain_same_sales_rate')} set={v => s('maintain_same_sales_rate', v)} label="Maintain Same Rate Throughout Sales Cycle" />
-        <CK v={num('validate_selling_price')} set={v => s('validate_selling_price', v)} label="Validate Selling Price Against Purchase Rate" />
-        <CK v={num('editable_price_list_rate')} set={v => s('editable_price_list_rate', v)} label="Allow User to Edit Price List Rate" />
-        <CK v={num('allow_multiple_items')} set={v => s('allow_multiple_items', v)} label="Allow Item to be Added Multiple Times" />
-        <CK v={num('hide_tax_id')} set={v => s('hide_tax_id', v)} label="Hide Customer's Tax ID from Sales Transactions" />
-        <CK v={num('enable_discount_accounting')} set={v => s('enable_discount_accounting', v)} label="Enable Discount Accounting for Selling" />
-        <CK v={num('allow_negative_rates_for_items')} set={v => s('allow_negative_rates_for_items', v)} label="Allow Negative Rates for Items" />
-      </>}
-    </>
-  );
-}
-
-// ─── Stock Settings form ───────────────────────────────────────────────────
-
-type StTab = 'General' | 'Valuation' | 'Purchasing' | 'Inter Warehouse';
-const ST_TABS: StTab[] = ['General', 'Valuation', 'Purchasing', 'Inter Warehouse'];
-
-function StockForm({ d, s }: { d: Record<string, unknown>; s: (k: string, v: unknown) => void }) {
-  const [tab, setTab] = useState<StTab>('General');
-  const str = (k: string) => String(d[k] || '');
-  const num = (k: string) => Number(d[k] || 0);
-
-  return (
-    <>
-      <Tabs tabs={ST_TABS} active={tab} set={setTab} />
-
-      {tab === 'General' && <>
-        <Sec title="Item Naming" />
-        <FR label="Item Naming By">
-          <SI v={str('item_naming_by')} set={v => s('item_naming_by', v)} opts={[{ l: 'Item Code', v: 'Item Code' }, { l: 'Naming Series', v: 'Naming Series' }]} />
-        </FR>
-
-        <Sec title="Defaults" />
-        <FR label="Default Warehouse"><TI v={str('default_warehouse')} set={v => s('default_warehouse', v)} ph="Stores - XYZ" /></FR>
-        <Grid>
-          <FR label="Stock Frozen Upto"><TI v={str('stock_frozen_upto')} set={v => s('stock_frozen_upto', v)} ph="YYYY-MM-DD" /></FR>
-          <FR label="Freeze Stocks Older Than (Days)"><NI v={num('stock_frozen_upto_days')} set={v => s('stock_frozen_upto_days', v)} /></FR>
-        </Grid>
-        <FR label="Role Allowed to Edit Frozen Stock"><TI v={str('stock_auth_role')} set={v => s('stock_auth_role', v)} ph="Stock Manager" /></FR>
-
-        <Sec title="Stock Ledger Settings" />
-        <CK v={num('allow_negative_stock')} set={v => s('allow_negative_stock', v)} label="Allow Negative Stock" />
-        <CK v={num('show_barcode_field')} set={v => s('show_barcode_field', v)} label="Show Barcode Field" />
-        <CK v={num('clean_description_html')} set={v => s('clean_description_html', v)} label="Clean Description HTML" />
-        <CK v={num('use_serial_batch_fields')} set={v => s('use_serial_batch_fields', v)} label="Use Serial / Batch Fields" />
-        <CK v={num('enable_stock_reservation')} set={v => s('enable_stock_reservation', v)} label="Enable Stock Reservation" />
-        <CK v={num('show_price_in_pro_forma')} set={v => s('show_price_in_pro_forma', v)} label="Show Price in Pro Forma" />
-      </>}
-
-      {tab === 'Valuation' && <>
-        <Sec title="Valuation Method" />
-        <FR label="Default Valuation Method">
-          <SI v={str('valuation_method')} set={v => s('valuation_method', v)} opts={[
-            { l: 'FIFO', v: 'FIFO' },
-            { l: 'Moving Average', v: 'Moving Average' },
-            { l: 'LIFO', v: 'LIFO' },
-          ]} />
-        </FR>
-
-        <Sec title="Price List Rate" />
-        <CK v={num('auto_insert_price_list_rate_if_missing')} set={v => s('auto_insert_price_list_rate_if_missing', v)} label="Auto Insert Price List Rate If Missing" />
-        <CK v={num('update_existing_price_list_rate')} set={v => s('update_existing_price_list_rate', v)} label="Update Price List Rate on Submission" />
-
-        <Sec title="Serial & Batch" />
-        <CK v={num('auto_update_serial_and_batch_from_purchase_receipt')} set={v => s('auto_update_serial_and_batch_from_purchase_receipt', v)} label="Auto Update Serial & Batch from Purchase Receipt" />
-        <CK v={num('set_qty_in_transactions_based_on_serial_no_input')} set={v => s('set_qty_in_transactions_based_on_serial_no_input', v)} label="Set Qty in Transactions Based on Serial No Input" />
-      </>}
-
-      {tab === 'Purchasing' && <>
-        <Sec title="Units of Measure" />
-        <FR label="Default Purchase UOM"><TI v={str('default_purchase_uom')} set={v => s('default_purchase_uom', v)} ph="Nos" /></FR>
-
-        <Sec title="Delivery / Receipt Allowance" />
-        <Grid>
-          <FR label="Over Delivery/Receipt Allowance (%)"><NI v={num('over_delivery_receipt_allowance')} set={v => s('over_delivery_receipt_allowance', v)} /></FR>
-          <FR label="Under Delivery/Receipt Allowance (%)"><NI v={num('under_delivery_receipt_allowance')} set={v => s('under_delivery_receipt_allowance', v)} /></FR>
-        </Grid>
-
-        <Sec title="Quality Inspection" />
-        <CK v={num('action_if_quality_inspection_is_not_submitted')} set={v => s('action_if_quality_inspection_is_not_submitted', v)} label="Action If Quality Inspection Is Not Submitted" />
-        <CK v={num('action_if_quality_inspection_is_rejected')} set={v => s('action_if_quality_inspection_is_rejected', v)} label="Action If Quality Inspection Is Rejected" />
-      </>}
-
-      {tab === 'Inter Warehouse' && <>
-        <Sec title="Inter Company / Inter Warehouse" />
-        <FR label="Inter Company Transaction Type">
-          <SI v={str('inter_company_transaction_type')} set={v => s('inter_company_transaction_type', v)} opts={[
-            { l: 'Sales Order → Purchase Order', v: 'Sales Order' },
-            { l: 'Sales Invoice → Purchase Invoice', v: 'Sales Invoice' },
-          ]} />
-        </FR>
-
-        <Sec title="Perpetual Inventory" />
-        <CK v={num('use_perpetual_inventory')} set={v => s('use_perpetual_inventory', v)} label="Use Perpetual Inventory" />
-        <CK v={num('auto_accounting_for_stock')} set={v => s('auto_accounting_for_stock', v)} label="Automatic Accounting For Stock Transactions" />
-      </>}
-    </>
-  );
-}
-
-// ─── Sidebar panels: Attachments, Assign To, Share ────────────────────────
-
-interface Attachment { name: string; file_name: string; file_url: string; is_private: number; file_size?: number }
-interface Assignment { owner: string; name: string }
-interface Share { user: string; name: string; read: number; write: number; everyone?: number }
-
-function PanelHead({ title, open, toggle, count }: { title: string; open: boolean; toggle: () => void; count?: number }) {
-  return (
-    <div onClick={toggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-      <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-        {title}{count !== undefined && count > 0 ? <span style={{ marginLeft: 6, background: 'rgba(99,102,241,0.25)', color: '#818cf8', borderRadius: 10, padding: '1px 7px', fontSize: 10 }}>{count}</span> : null}
-      </span>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9" /></svg>
-    </div>
-  );
-}
-
-function AttachmentsPanel({ doctype, docname }: { doctype: string; docname: string }) {
-  const [open, setOpen] = useState(true);
-  const [files, setFiles] = useState<Attachment[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { getAttachments(doctype, docname).then(setFiles).catch(() => {}); }, [doctype, docname]);
-
-  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
-    setUploading(true);
-    try {
-      const att = await uploadAttachment(file, doctype, docname);
-      setFiles(prev => [...prev, { name: att.name, file_name: att.file_name, file_url: att.file_url, is_private: 0 }]);
-    } catch { /* ignore */ } finally { setUploading(false); }
-  }
-
-  async function remove(name: string) {
-    try { await deleteAttachment(name); setFiles(prev => prev.filter(f => f.name !== name)); } catch { /* */ }
-  }
-
-  function fmtSize(bytes?: number) {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1048576).toFixed(1)} MB`;
-  }
-
-  return (
-    <div style={{ background: '#151c2c', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, marginBottom: 10 }}>
-      <PanelHead title="Attachments" open={open} toggle={() => setOpen(o => !o)} count={files.length} />
-      {open && (
-        <div style={{ padding: '10px 14px' }}>
-          {files.length === 0 && <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12, marginBottom: 10 }}>No attachments</div>}
-          {files.map(f => (
-            <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
-              <a href={`${BASE_URL}${f.file_url}`} target="_blank" rel="noopener noreferrer" style={{ flex: 1, color: '#818cf8', fontSize: 12, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name || f.file_url}</a>
-              {f.file_size ? <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>{fmtSize(f.file_size)}</span> : null}
-              <button onClick={() => remove(f.name)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '0 2px', fontSize: 15 }}>×</button>
-            </div>
-          ))}
-          <button onClick={() => ref.current?.click()} disabled={uploading} style={{ width: '100%', marginTop: 4, padding: '6px', background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer' }}>
-            {uploading ? 'Uploading…' : '+ Attach file'}
-          </button>
-          <input ref={ref} type="file" style={{ display: 'none' }} onChange={upload} />
-        </div>
+        </>
       )}
-    </div>
+    </>
   );
 }
 
-function AssignToPanel({ doctype, docname }: { doctype: string; docname: string }) {
-  const [open, setOpen] = useState(true);
-  const [list, setList] = useState<Assignment[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [input, setInput] = useState('');
-  const [desc, setDesc] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => { getAssignments(doctype, docname).then(setList).catch(() => {}); }, [doctype, docname]);
-
-  async function add() {
-    if (!input.trim()) return;
-    setBusy(true);
-    try { await addAssignment(doctype, docname, input.trim(), desc); setList(await getAssignments(doctype, docname)); setInput(''); setDesc(''); setAdding(false); }
-    catch { /* */ } finally { setBusy(false); }
-  }
-
-  async function remove(user: string, name: string) {
-    try { await removeAssignment(doctype, docname, user); setList(prev => prev.filter(a => a.name !== name)); }
-    catch { /* */ }
-  }
-
-  return (
-    <div style={{ background: '#151c2c', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, marginBottom: 10 }}>
-      <PanelHead title="Assign To" open={open} toggle={() => setOpen(o => !o)} count={list.length} />
-      {open && (
-        <div style={{ padding: '10px 14px' }}>
-          {list.length === 0 && !adding && <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12, marginBottom: 8 }}>Not assigned</div>}
-          {list.map(a => (
-            <div key={a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-              <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(99,102,241,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#818cf8', flexShrink: 0 }}>
-                {(a.owner || '?').slice(0, 1).toUpperCase()}
-              </div>
-              <span style={{ flex: 1, fontSize: 12, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.owner}</span>
-              <button onClick={() => remove(a.owner, a.name)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 15 }}>×</button>
-            </div>
-          ))}
-          {adding ? (
-            <div style={{ marginTop: 8 }}>
-              <input style={{ ...I, marginBottom: 6 }} value={input} onChange={e => setInput(e.target.value)} placeholder="user@example.com" />
-              <input style={{ ...I, marginBottom: 8 }} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Description (optional)" />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={add} disabled={busy} style={{ flex: 1, padding: '6px', background: '#6366f1', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, cursor: 'pointer' }}>{busy ? '…' : 'Assign'}</button>
-                <button onClick={() => setAdding(false)} style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 5, color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setAdding(true)} style={{ width: '100%', marginTop: 4, padding: '6px', background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer' }}>+ Add assignee</button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SharePanel({ doctype, docname }: { doctype: string; docname: string }) {
-  const [open, setOpen] = useState(true);
-  const [list, setList] = useState<Share[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [input, setInput] = useState('');
-  const [write, setWrite] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => { getShares(doctype, docname).then(setList).catch(() => {}); }, [doctype, docname]);
-
-  async function add() {
-    if (!input.trim()) return;
-    setBusy(true);
-    try { await addShare(doctype, docname, input.trim(), write ? 1 : 0); setList(await getShares(doctype, docname)); setInput(''); setWrite(false); setAdding(false); }
-    catch { /* */ } finally { setBusy(false); }
-  }
-
-  async function remove(name: string, user: string) {
-    try { await removeShare(doctype, docname, user); setList(prev => prev.filter(s => s.name !== name)); }
-    catch { /* */ }
-  }
-
-  return (
-    <div style={{ background: '#151c2c', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, marginBottom: 10 }}>
-      <PanelHead title="Shared With" open={open} toggle={() => setOpen(o => !o)} count={list.filter(s => !s.everyone).length} />
-      {open && (
-        <div style={{ padding: '10px 14px' }}>
-          {list.length === 0 && !adding && <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12, marginBottom: 8 }}>Not shared</div>}
-          {list.map(sh => (
-            <div key={sh.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-              <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(16,185,129,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#34d399', flexShrink: 0 }}>
-                {(sh.user || '?').slice(0, 1).toUpperCase()}
-              </div>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontSize: 12, color: '#cbd5e1', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{sh.user}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{sh.write ? 'Can edit' : 'View only'}</div>
-              </div>
-              <button onClick={() => remove(sh.name, sh.user)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 15 }}>×</button>
-            </div>
-          ))}
-          {adding ? (
-            <div style={{ marginTop: 8 }}>
-              <input style={{ ...I, marginBottom: 8 }} value={input} onChange={e => setInput(e.target.value)} placeholder="user@example.com" />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
-                <input type="checkbox" checked={write} onChange={e => setWrite(e.target.checked)} style={{ accentColor: '#6366f1' }} />
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>Allow editing</span>
-              </label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={add} disabled={busy} style={{ flex: 1, padding: '6px', background: '#6366f1', border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, cursor: 'pointer' }}>{busy ? '…' : 'Share'}</button>
-                <button onClick={() => setAdding(false)} style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 5, color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setAdding(true)} style={{ width: '100%', marginTop: 4, padding: '6px', background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.12)', borderRadius: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer' }}>+ Share with user</button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Settings modules ──────────────────────────────────────────────────────
-
-type ModuleId = 'website' | 'system' | 'selling' | 'stock';
-const MODULES = [
-  { id: 'website' as ModuleId, label: 'Website Settings', doctype: 'Website Settings',
-    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> },
-  { id: 'system' as ModuleId, label: 'System Settings', doctype: 'System Settings',
-    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg> },
-  { id: 'selling' as ModuleId, label: 'Selling Settings', doctype: 'Selling Settings',
-    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> },
-  { id: 'stock' as ModuleId, label: 'Stock Settings', doctype: 'Stock Settings',
-    icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> },
-];
-
-// ─── Main page ─────────────────────────────────────────────────────────────
-
-export default function AdminSettings() {
-  const [active, setActive] = useState<ModuleId>('website');
-  const [docs, setDocs] = useState<Record<ModuleId, Record<string, unknown>>>({ website: {}, system: {}, selling: {}, stock: {} });
-  const [loaded, setLoaded] = useState<Record<ModuleId, boolean>>({ website: false, system: false, selling: false, stock: false });
+function UserEditForm({ doc, availableRoles, onSave, onCancel }: {
+  doc: UserDoc; availableRoles: string[];
+  onSave: (data: UserDoc) => void; onCancel: () => void;
+}) {
+  const [d, setD] = useState<UserDoc>({ ...doc });
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [msg, setMsg] = useState('');
+  const f = (k: string, v: unknown) => setD(prev => ({ ...prev, [k]: v }));
+  const roles = ((d.roles as Record<string, unknown>[]) || []).map(r => r.role as string);
+  const setRoles = (rs: string[]) => f('roles', rs.map(r => ({ role: r })));
 
-  const showToast = useCallback((msg: string, type: 'success' | 'error') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
+  async function save() {
+    setSaving(true); setMsg('');
+    try { await onSave(d); }
+    catch (e) { setMsg((e as Error).message || 'Save failed.'); setSaving(false); }
+  }
+
+  return (
+    <div style={{ background: '#f8fafc', padding: 16, borderTop: '1px solid #e2e8f0' }}>
+      {/* ── Basic Info ── */}
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Basic Info</div>
+      <Grid>
+        <FR label="First Name *"><TI value={d.first_name as string} onChange={v => f('first_name', v)} placeholder="First name" /></FR>
+        <FR label="Last Name"><TI value={d.last_name as string} onChange={v => f('last_name', v)} placeholder="Last name" /></FR>
+        <FR label="Middle Name"><TI value={d.middle_name as string} onChange={v => f('middle_name', v)} placeholder="Middle name" /></FR>
+        <FR label="Username" hint="Short login name"><TI value={d.username as string} onChange={v => f('username', v)} placeholder="john_doe" /></FR>
+        <FR label="Email" hint="Login ID — changing this changes login"><TI value={d.email as string} onChange={v => f('email', v)} placeholder="user@example.com" /></FR>
+        <FR label="Mobile No"><TI value={d.mobile_no as string} onChange={v => f('mobile_no', v)} placeholder="+91 9999999999" /></FR>
+        <FR label="Phone"><TI value={d.phone as string} onChange={v => f('phone', v)} placeholder="Phone number" /></FR>
+        <FR label="Gender">
+          <SI value={d.gender as string || ''} onChange={v => f('gender', v)}
+            options={[{ value: '', label: '— Select —' }, { value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }, { value: 'Prefer not to say', label: 'Prefer not to say' }]} />
+        </FR>
+        <FR label="Birth Date"><TI value={d.birth_date as string} onChange={v => f('birth_date', v)} type="date" /></FR>
+        <FR label="Location"><TI value={d.location as string} onChange={v => f('location', v)} placeholder="City, Country" /></FR>
+      </Grid>
+      <FR label="Bio / Interests">
+        <textarea className="settings-input" rows={2} value={d.bio as string || ''} onChange={e => f('bio', e.target.value)} placeholder="Short bio…" style={{ resize: 'vertical' }} />
+      </FR>
+
+      {/* ── Account ── */}
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Account</div>
+      <Grid>
+        <FR label="User Type">
+          <SI value={d.user_type as string || 'System User'} onChange={v => f('user_type', v)}
+            options={[{ value: 'System User', label: 'System User' }, { value: 'Website User', label: 'Website User' }]} />
+        </FR>
+        <FR label="Role Profile">
+          <TI value={d.role_profile_name as string} onChange={v => f('role_profile_name', v)} placeholder="Role Profile name" />
+        </FR>
+        <FR label="Module Profile">
+          <TI value={d.module_profile as string} onChange={v => f('module_profile', v)} placeholder="Module Profile name" />
+        </FR>
+        <FR label="Default App">
+          <TI value={d.default_app as string} onChange={v => f('default_app', v)} placeholder="e.g. webshop" />
+        </FR>
+      </Grid>
+      <TglRow label="Enabled" checked={!!d.enabled} onChange={v => f('enabled', v ? 1 : 0)} />
+      <TglRow label="Unsubscribed" desc="Unsubscribed from all bulk emails" checked={!!d.unsubscribed} onChange={v => f('unsubscribed', v ? 1 : 0)} />
+
+      {/* ── Password ── */}
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Password</div>
+      <Grid>
+        <FR label="Set New Password" hint="Leave blank to keep current"><PI value={d.new_password as string} onChange={v => f('new_password', v)} placeholder="New password" /></FR>
+      </Grid>
+      <TglRow label="Logout from all devices after changing password" checked={!!d.logout_all_sessions} onChange={v => f('logout_all_sessions', v ? 1 : 0)} />
+
+      {/* ── Preferences ── */}
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Preferences</div>
+      <Grid>
+        <FR label="Language"><TI value={d.language as string} onChange={v => f('language', v)} placeholder="e.g. en" /></FR>
+        <FR label="Time Zone"><TI value={d.time_zone as string} onChange={v => f('time_zone', v)} placeholder="Asia/Kolkata" /></FR>
+        <FR label="Desk Theme">
+          <SI value={d.desk_theme as string || 'Light'} onChange={v => f('desk_theme', v)}
+            options={[{ value: 'Light', label: 'Light' }, { value: 'Dark', label: 'Dark' }, { value: 'Automatic', label: 'Automatic' }]} />
+        </FR>
+      </Grid>
+      <TglRow label="Mute Sounds" checked={!!d.mute_sounds} onChange={v => f('mute_sounds', v ? 1 : 0)} />
+
+      {/* ── Roles ── */}
+      <div style={{ fontWeight: 700, fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '16px 0 10px' }}>Roles</div>
+      <RoleSelector selected={roles} available={availableRoles} onChange={setRoles} />
+
+      <UserNotificationsFields d={d} f={f} />
+      <UserSecurityFields d={d} f={f} />
+
+      {msg && <div style={{ fontSize: 13, color: '#dc2626', margin: '10px 0' }}>{msg}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <button className="admin-btn-primary" onClick={save} disabled={saving} style={{ fontSize: 13 }}>{saving ? 'Saving…' : 'Save User'}</button>
+        <button className="admin-btn-secondary" onClick={onCancel} style={{ fontSize: 13 }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function UsersSection() {
+  const [tab, setTab] = useState<'users' | 'roles' | 'permissions'>('users');
+  const [users, setUsers] = useState<UserDoc[]>([]);
+  const [roles, setRoles] = useState<UserDoc[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'System User' | 'Website User'>('all');
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [userDetails, setUserDetails] = useState<Record<string, UserDoc>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState({ ...EMPTY_ADD_FORM });
+  const [addSaving, setAddSaving] = useState(false);
+  const [addMsg, setAddMsg] = useState('');
+  const [flashMsg, setFlashMsg] = useState('');
+  const [userRolesMap, setUserRolesMap] = useState<Record<string, string[]>>({});
+  const [roleUsersMap, setRoleUsersMap] = useState<Record<string, string[]>>({});
+  const [expandedRole, setExpandedRole] = useState<string | null>(null);
+  const [roleSearch, setRoleSearch] = useState('');
+
+  const flash = (m: string) => { setFlashMsg(m); setTimeout(() => setFlashMsg(''), 3000); };
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ur, hr] = await Promise.all([
+        ff(`/api/resource/User?fields=["name","full_name","first_name","last_name","email","username","enabled","user_type","last_active","mobile_no","user_image"]&limit=500&order_by=full_name asc`),
+        ff(`/api/resource/Has%20Role?filters=[["parenttype","=","User"]]&fields=["parent","role"]&limit=5000`),
+      ]);
+      setUsers(ur.data || []);
+      const uMap: Record<string, string[]> = {};
+      const rMap: Record<string, string[]> = {};
+      for (const row of (hr.data || [])) {
+        const p = row.parent as string;
+        const role = row.role as string;
+        if (!uMap[p]) uMap[p] = [];
+        uMap[p].push(role);
+        if (!rMap[role]) rMap[role] = [];
+        rMap[role].push(p);
+      }
+      setUserRolesMap(uMap);
+      setRoleUsersMap(rMap);
+    } catch { /**/ } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    if (loaded[active]) return;
-    const mod = MODULES.find(m => m.id === active)!;
-    readDoc(mod.doctype)
-      .then(data => { setDocs(p => ({ ...p, [active]: data })); setLoaded(p => ({ ...p, [active]: true })); })
-      .catch(e => showToast(e.message, 'error'));
-  }, [active, loaded, showToast]);
+  const loadRoles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await ff(`/api/resource/Role?fields=["name","role_name","disabled","desk_access","is_custom"]&limit=200&order_by=role_name asc`);
+      setRoles(r.data || []);
+    } catch { /**/ } finally { setLoading(false); }
+  }, []);
 
-  function set(key: string, value: unknown) {
-    setDocs(p => ({ ...p, [active]: { ...p[active], [key]: value } }));
+  const ensureAvailableRoles = useCallback(async () => {
+    if (availableRoles.length) return;
+    try {
+      const r = await ff(`/api/resource/Role?fields=["name"]&filters=[["disabled","=",0],["name","!=","All"]]&limit=500&order_by=name asc`);
+      setAvailableRoles((r.data || []).map((x: UserDoc) => x.name as string));
+    } catch { /**/ }
+  }, [availableRoles.length]);
+
+  useEffect(() => {
+    if (tab === 'users') loadUsers();
+    else if (tab === 'roles') loadRoles();
+  }, [tab, loadUsers, loadRoles]);
+
+  useEffect(() => { if (showAddForm || editingUser) ensureAvailableRoles(); }, [showAddForm, editingUser, ensureAvailableRoles]);
+
+  async function toggleExpand(email: string) {
+    if (expandedUser === email) { setExpandedUser(null); setEditingUser(null); return; }
+    setExpandedUser(email); setEditingUser(null);
+    if (!userDetails[email]) {
+      try {
+        const r = await ff(`/api/resource/User/${encodeURIComponent(email)}`);
+        setUserDetails(prev => ({ ...prev, [email]: r.data || {} }));
+      } catch { /**/ }
+    }
+  }
+
+  async function saveUser(email: string, data: UserDoc) {
+    await ff(`/api/resource/User/${encodeURIComponent(email)}`, { method: 'PUT', body: JSON.stringify({ data }) });
+    const updated = { ...userDetails[email], ...data };
+    setUserDetails(prev => ({ ...prev, [email]: updated }));
+    setUsers(prev => prev.map(u => u.name === email ? { ...u, enabled: data.enabled ?? u.enabled, full_name: data.full_name ?? u.full_name, user_type: data.user_type ?? u.user_type, mobile_no: data.mobile_no ?? u.mobile_no } : u));
+    if (data.roles) {
+      const newRoles = (data.roles as { role: string }[]).map(r => r.role);
+      const oldRoles = userRolesMap[email] || [];
+      setUserRolesMap(prev => ({ ...prev, [email]: newRoles }));
+      setRoleUsersMap(prev => {
+        const next = { ...prev };
+        for (const r of oldRoles) {
+          if (next[r]) next[r] = next[r].filter(e => e !== email);
+        }
+        for (const r of newRoles) {
+          if (!next[r]) next[r] = [];
+          if (!next[r].includes(email)) next[r] = [...next[r], email];
+        }
+        return next;
+      });
+    }
+    setEditingUser(null);
+    flash('User saved.');
+  }
+
+  async function toggleRoleDisabled(name: string, disabled: boolean) {
+    try {
+      await ff(`/api/resource/Role/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ data: { disabled: disabled ? 1 : 0 } }) });
+      setRoles(prev => prev.map(r => r.name === name ? { ...r, disabled: disabled ? 1 : 0 } : r));
+    } catch { /**/ }
+  }
+
+  async function submitAddUser() {
+    if (!addForm.first_name.trim()) { setAddMsg('First name is required.'); return; }
+    if (!addForm.email.trim()) { setAddMsg('Email is required.'); return; }
+    setAddSaving(true); setAddMsg('');
+    try {
+      const payload: UserDoc = {
+        first_name: addForm.first_name, middle_name: addForm.middle_name,
+        last_name: addForm.last_name, email: addForm.email,
+        username: addForm.username || undefined,
+        mobile_no: addForm.mobile_no, phone: addForm.phone,
+        gender: addForm.gender || undefined,
+        birth_date: addForm.birth_date || undefined,
+        location: addForm.location, bio: addForm.bio,
+        user_type: addForm.user_type,
+        language: addForm.language || undefined,
+        time_zone: addForm.time_zone || undefined,
+        desk_theme: addForm.desk_theme,
+        send_welcome_email: addForm.send_welcome_email ? 1 : 0,
+        roles: addForm.roles.map(r => ({ role: r })),
+      };
+      if (addForm.new_password.trim()) payload.new_password = addForm.new_password;
+      await ff('/api/resource/User', { method: 'POST', body: JSON.stringify({ data: payload }) });
+      await loadUsers();
+      setShowAddForm(false);
+      setAddForm({ ...EMPTY_ADD_FORM });
+      flash('User created successfully.');
+    } catch (e) { setAddMsg((e as Error).message || 'Failed to create user.'); }
+    finally { setAddSaving(false); }
+  }
+
+  function fmtDate(d: unknown) {
+    if (!d) return '—';
+    try { return new Date(d as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+    catch { return d as string; }
+  }
+
+  const displayUsers = users.filter(u => {
+    const q = userSearch.toLowerCase();
+    const matchQ = !q || (u.full_name as string || '').toLowerCase().includes(q) || (u.name as string).toLowerCase().includes(q) || (u.username as string || '').toLowerCase().includes(q);
+    const matchType = typeFilter === 'all' || u.user_type === typeFilter;
+    return matchQ && matchType;
+  });
+
+  return (
+    <>
+      {flashMsg && (
+        <div style={{ padding: '9px 14px', marginBottom: 12, borderRadius: 8, fontSize: 13, fontWeight: 600, background: 'rgba(34,197,94,0.1)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.2)' }}>
+          {flashMsg}
+        </div>
+      )}
+
+      <div className="settings-tabs">
+        {(['users', 'roles', 'permissions'] as const).map(t => (
+          <button key={t} className={`settings-tab-btn ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
+            {t === 'users' ? `Users${users.length ? ` (${users.length})` : ''}` : t === 'roles' ? 'Roles' : 'Permissions'}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ USERS TAB ══ */}
+      {tab === 'users' && (
+        <>
+          {showAddForm ? (
+            <Card title="Add New User">
+              <button
+                onClick={() => { setShowAddForm(false); setAddForm({ ...EMPTY_ADD_FORM }); setAddMsg(''); }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 16, background: 'none', border: 'none', cursor: 'pointer', color: '#1d4ed8', fontSize: 13, fontWeight: 600, padding: '4px 0' }}
+              >
+                ← Back to Users
+              </button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+                <FR label="First Name *"><TI value={addForm.first_name} onChange={v => setAddForm(f => ({ ...f, first_name: v }))} placeholder="First name" /></FR>
+                <FR label="Middle Name"><TI value={addForm.middle_name} onChange={v => setAddForm(f => ({ ...f, middle_name: v }))} placeholder="Middle name" /></FR>
+                <FR label="Last Name"><TI value={addForm.last_name} onChange={v => setAddForm(f => ({ ...f, last_name: v }))} placeholder="Last name" /></FR>
+                <FR label="Email *" hint="Login ID"><TI value={addForm.email} onChange={v => setAddForm(f => ({ ...f, email: v }))} placeholder="user@example.com" type="email" /></FR>
+                <FR label="Username"><TI value={addForm.username} onChange={v => setAddForm(f => ({ ...f, username: v }))} placeholder="Optional short login name" /></FR>
+                <FR label="Mobile No"><TI value={addForm.mobile_no} onChange={v => setAddForm(f => ({ ...f, mobile_no: v }))} placeholder="+91 9999999999" /></FR>
+                <FR label="Phone"><TI value={addForm.phone} onChange={v => setAddForm(f => ({ ...f, phone: v }))} /></FR>
+                <FR label="Gender">
+                  <SI value={addForm.gender} onChange={v => setAddForm(f => ({ ...f, gender: v }))}
+                    options={[{ value: '', label: '— Select —' }, { value: 'Male', label: 'Male' }, { value: 'Female', label: 'Female' }, { value: 'Other', label: 'Other' }, { value: 'Prefer not to say', label: 'Prefer not to say' }]} />
+                </FR>
+                <FR label="Birth Date"><TI value={addForm.birth_date} onChange={v => setAddForm(f => ({ ...f, birth_date: v }))} type="date" /></FR>
+                <FR label="Location"><TI value={addForm.location} onChange={v => setAddForm(f => ({ ...f, location: v }))} placeholder="City, Country" /></FR>
+                <FR label="User Type">
+                  <SI value={addForm.user_type} onChange={v => setAddForm(f => ({ ...f, user_type: v }))}
+                    options={[{ value: 'System User', label: 'System User' }, { value: 'Website User', label: 'Website User' }]} />
+                </FR>
+                <FR label="Language"><TI value={addForm.language} onChange={v => setAddForm(f => ({ ...f, language: v }))} placeholder="en" /></FR>
+                <FR label="Time Zone"><TI value={addForm.time_zone} onChange={v => setAddForm(f => ({ ...f, time_zone: v }))} placeholder="Asia/Kolkata" /></FR>
+                <FR label="Desk Theme">
+                  <SI value={addForm.desk_theme} onChange={v => setAddForm(f => ({ ...f, desk_theme: v }))}
+                    options={[{ value: 'Light', label: 'Light' }, { value: 'Dark', label: 'Dark' }, { value: 'Automatic', label: 'Automatic' }]} />
+                </FR>
+                <FR label="New Password" hint="Leave blank to send welcome email"><PI value={addForm.new_password} onChange={v => setAddForm(f => ({ ...f, new_password: v }))} placeholder="Optional" /></FR>
+              </div>
+              <div style={{ margin: '4px 0 12px' }}>
+                <TglRow label="Send Welcome Email" desc="Email user a link to set their password" checked={addForm.send_welcome_email} onChange={v => setAddForm(f => ({ ...f, send_welcome_email: v }))} />
+              </div>
+              <FR label="Assign Roles">
+                <RoleSelector selected={addForm.roles} available={availableRoles} onChange={rs => setAddForm(f => ({ ...f, roles: rs }))} />
+              </FR>
+              {addMsg && <div style={{ fontSize: 13, color: '#dc2626', margin: '8px 0' }}>{addMsg}</div>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <button className="admin-btn-primary" onClick={submitAddUser} disabled={addSaving} style={{ fontSize: 13 }}>{addSaving ? 'Creating…' : 'Create User'}</button>
+                <button className="admin-btn-secondary" onClick={() => { setShowAddForm(false); setAddForm({ ...EMPTY_ADD_FORM }); setAddMsg(''); }} style={{ fontSize: 13 }}>Cancel</button>
+              </div>
+            </Card>
+          ) : (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+              <button className="admin-btn-primary" onClick={() => { setShowAddForm(true); ensureAvailableRoles(); }} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Add User
+              </button>
+              <input className="settings-input" style={{ flex: 1, minWidth: 180, maxWidth: 280 }} placeholder="Search by name / email / username…" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['all', 'System User', 'Website User'] as const).map(t => (
+                  <button key={t} onClick={() => setTypeFilter(t)}
+                    style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid', fontSize: 12, cursor: 'pointer',
+                      borderColor: typeFilter === t ? '#1d4ed8' : '#cbd5e1',
+                      background: typeFilter === t ? '#1d4ed8' : '#ffffff',
+                      color: typeFilter === t ? '#fff' : '#334155', fontWeight: typeFilter === t ? 600 : 400 }}>
+                    {t === 'all' ? 'All' : t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Card title={`Users${displayUsers.length !== users.length ? ` — ${displayUsers.length} of ${users.length}` : ` — ${users.length}`}`}>
+            {loading ? <div className="settings-loading">Loading…</div> : displayUsers.length === 0 ? (
+              <div style={{ color: '#64748b', fontSize: 13, padding: '8px 0' }}>No users found.</div>
+            ) : (
+              <table className="settings-shipping-table">
+                <thead>
+                  <tr><th>User</th><th>Roles</th><th>Type</th><th>Last Active</th><th>Status</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {displayUsers.map((u: UserDoc) => {
+                    const email = u.name as string;
+                    const isExpanded = expandedUser === email;
+                    const isEditing = editingUser === email;
+                    const detail = userDetails[email];
+                    const uRoles = userRolesMap[email] || [];
+                    return (
+                      <>
+                        <tr key={email} style={{ cursor: 'pointer' }} onClick={() => toggleExpand(email)}>
+                          <td style={{ minWidth: 180 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{u.full_name as string || email}</div>
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{email}</div>
+                            {!!u.username && <div style={{ fontSize: 11, color: '#64748b' }}>@{u.username as string}</div>}
+                          </td>
+                          <td style={{ maxWidth: 260 }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                              {uRoles.length === 0
+                                ? <span style={{ fontSize: 11, color: '#64748b' }}>No roles</span>
+                                : uRoles.slice(0, 4).map(r => (
+                                  <span key={r} className="settings-role-chip" style={{ fontSize: 10, padding: '2px 7px' }}>{r}</span>
+                                ))}
+                              {uRoles.length > 4 && (
+                                <span style={{ fontSize: 10, color: '#64748b', alignSelf: 'center' }}>+{uRoles.length - 4} more</span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ fontSize: 12, color: '#475569' }}>{u.user_type as string}</td>
+                          <td style={{ fontSize: 12, color: '#64748b' }}>{fmtDate(u.last_active)}</td>
+                          <td><span className={`settings-badge ${u.enabled ? 'active' : 'disabled'}`}>{u.enabled ? 'Active' : 'Disabled'}</span></td>
+                          <td onClick={e => e.stopPropagation()}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <a href={`/app/user/${encodeURIComponent(email)}`} target="_blank" rel="noreferrer"
+                                style={{ color: '#64748b', display: 'flex' }} title="Open in Frappe">
+                                <ExternalLink size={13} />
+                              </a>
+                              {isExpanded ? <ChevronUp size={14} style={{ color: '#64748b' }} /> : <ChevronDown size={14} style={{ color: '#64748b' }} />}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr key={`${email}-exp`}>
+                            <td colSpan={6} style={{ padding: 0 }}>
+                              {!detail ? (
+                                <div style={{ padding: '12px 16px', color: '#64748b', fontSize: 13 }}>Loading user details…</div>
+                              ) : !isEditing ? (
+                                /* ── Summary view ── */
+                                <div style={{ background: '#f8fafc', padding: '14px 16px', borderTop: '1px solid #e2e8f0' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px 20px', fontSize: 12, marginBottom: 12 }}>
+                                    {[
+                                      ['Email', detail.email], ['Username', detail.username],
+                                      ['Mobile', detail.mobile_no], ['Phone', detail.phone],
+                                      ['Gender', detail.gender], ['Birth Date', detail.birth_date],
+                                      ['Location', detail.location], ['Type', detail.user_type],
+                                      ['Language', detail.language], ['Time Zone', detail.time_zone],
+                                      ['Desk Theme', detail.desk_theme], ['Last Active', detail.last_active],
+                                    ].map(([k, v]) => (
+                                      <div key={k as string}>
+                                        <div style={{ color: '#64748b', fontSize: 11, marginBottom: 1 }}>{k as string}</div>
+                                        <div style={{ color: '#1e293b', fontWeight: 500 }}>{(v as string) || '—'}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div style={{ marginBottom: 8 }}>
+                                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Roles ({uRoles.length})</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                      {uRoles.length === 0
+                                        ? <span style={{ fontSize: 12, color: '#64748b' }}>No roles</span>
+                                        : uRoles.map(r => <span key={r} className="settings-role-chip">{r}</span>)}
+                                    </div>
+                                  </div>
+                                  <button className="admin-btn-primary" onClick={() => { setEditingUser(email); ensureAvailableRoles(); }} style={{ fontSize: 12, marginTop: 4 }}>
+                                    Edit User
+                                  </button>
+                                </div>
+                              ) : (
+                                /* ── Full edit form ── */
+                                <UserEditForm
+                                  doc={detail}
+                                  availableRoles={availableRoles}
+                                  onSave={data => saveUser(email, data)}
+                                  onCancel={() => setEditingUser(null)}
+                                />
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </Card>
+        </>
+      )}
+
+      {/* ══ ROLES TAB ══ */}
+      {tab === 'roles' && (
+        <Card title={`Roles${roles.length ? ` — ${roles.length}` : ''}`}>
+          <div style={{ marginBottom: 14 }}>
+            <input
+              className="settings-input"
+              style={{ maxWidth: 320 }}
+              placeholder="Search roles by name…"
+              value={roleSearch}
+              onChange={e => setRoleSearch(e.target.value)}
+            />
+          </div>
+          {loading ? <div className="settings-loading">Loading…</div> : (
+            <table className="settings-shipping-table">
+              <thead>
+                <tr>
+                  <th>Role Name</th>
+                  <th>Assigned Users</th>
+                  <th>Desk Access</th>
+                  <th>Type</th>
+                  <th>Enable / Disable</th>
+                </tr>
+              </thead>
+              <tbody>
+                {roles.filter(r => {
+                  const q = roleSearch.toLowerCase();
+                  return !q || (r.name as string).toLowerCase().includes(q) || ((r.role_name as string) || '').toLowerCase().includes(q);
+                }).map((r: UserDoc) => {
+                  const rname = r.name as string;
+                  const assigned = roleUsersMap[rname] || [];
+                  const isExp = expandedRole === rname;
+                  return (
+                    <>
+                      <tr key={rname}
+                        style={{ cursor: assigned.length > 0 ? 'pointer' : 'default', opacity: r.disabled ? 0.55 : 1 }}
+                        onClick={() => assigned.length > 0 && setExpandedRole(isExp ? null : rname)}
+                      >
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>
+                            {r.role_name as string || rname}
+                          </div>
+                          {!!r.role_name && r.role_name !== rname && (
+                            <div style={{ fontSize: 11, color: '#64748b' }}>{rname}</div>
+                          )}
+                        </td>
+                        <td>
+                          {assigned.length === 0
+                            ? <span style={{ fontSize: 12, color: '#64748b' }}>None</span>
+                            : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}>
+                                {assigned.length} user{assigned.length !== 1 ? 's' : ''}
+                                {isExp ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                              </span>
+                            )}
+                        </td>
+                        <td>
+                          <span className={`settings-badge ${r.desk_access ? 'active' : 'disabled'}`}>
+                            {r.desk_access ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`settings-badge ${r.is_custom ? 'active' : ''}`}>
+                            {r.is_custom ? 'Custom' : 'System'}
+                          </span>
+                        </td>
+                        <td onClick={e => e.stopPropagation()}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Tgl checked={!r.disabled} onChange={v => toggleRoleDisabled(rname, !v)} />
+                            <span style={{ fontSize: 11, color: r.disabled ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                              {r.disabled ? 'Disabled' : 'Enabled'}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExp && assigned.length > 0 && (
+                        <tr key={`${rname}-users`}>
+                          <td colSpan={5} style={{ background: '#f8fafc', padding: '10px 16px', borderTop: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                              Users with role "{r.role_name as string || rname}"
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {assigned.map(email => {
+                                const u = users.find(x => x.name === email);
+                                const name = u ? (u.full_name as string || email) : email;
+                                const enabled = u ? !!u.enabled : true;
+                                return (
+                                  <div key={email} style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    padding: '4px 10px', borderRadius: 20, fontSize: 12,
+                                    background: enabled ? 'rgba(59,130,246,0.08)' : 'rgba(100,116,139,0.08)',
+                                    border: `1px solid ${enabled ? 'rgba(59,130,246,0.2)' : 'rgba(100,116,139,0.2)'}`,
+                                    color: enabled ? '#2563eb' : '#64748b',
+                                  }}>
+                                    <span style={{ fontWeight: 600 }}>{name}</span>
+                                    {!enabled && <span style={{ fontSize: 10 }}>(disabled)</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
+            <ExtBtn href="/app/role/new" label="New Role" />
+            <ExtBtn href="/app/role" label="Manage All Roles" />
+          </div>
+        </Card>
+      )}
+
+      {/* ══ PERMISSIONS TAB ══ */}
+      {tab === 'permissions' && (
+        <>
+          <InfoCard>
+            <strong>DocType Permissions</strong>
+            <p style={{ margin: '8px 0', fontSize: 13, color: '#64748b' }}>Control which roles can read, write, create, delete, or submit specific DocTypes.</p>
+            <ExtBtn href="/app/permission-manager" label="Open Permission Manager" />
+          </InfoCard>
+          <InfoCard>
+            <strong>Page &amp; Report Permissions</strong>
+            <p style={{ margin: '8px 0', fontSize: 13, color: '#64748b' }}>Control access to specific Frappe pages and reports by role.</p>
+            <ExtBtn href="/app/role-permission-for-page-and-report" label="Open Role Permissions for Pages &amp; Reports" />
+          </InfoCard>
+          <InfoCard>
+            <strong>Role Profiles</strong>
+            <p style={{ margin: '8px 0', fontSize: 13, color: '#64748b' }}>Group roles into profiles and assign to users in bulk.</p>
+            <ExtBtn href="/app/role-profile" label="Manage Role Profiles" />
+          </InfoCard>
+        </>
+      )}
+    </>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────
+
+export default function AdminSettings() {
+  const [active, setActive] = useState('general');
+  const [docs, setDocs] = useState<Record<string, Record<string, unknown>>>({});
+  const [dirty, setDirty] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [shippingRules, setShippingRules] = useState<Record<string, unknown>[]>([]);
+  const [notifications, setNotifications] = useState<Record<string, unknown>[]>([]);
+  const [emailDoc, setEmailDoc] = useState<Record<string, unknown>>({});
+  const [emailAccName, setEmailAccName] = useState('');
+  const [emailDirty, setEmailDirty] = useState(false);
+
+  function set(doctype: string, field: string, value: unknown) {
+    setDocs(prev => ({ ...prev, [doctype]: { ...(prev[doctype] || {}), [field]: value } }));
+    setDirty(prev => new Set([...prev, doctype]));
+  }
+
+  function setEmailField(field: string, value: unknown) {
+    setEmailDoc(prev => ({ ...prev, [field]: value }));
+    setEmailDirty(true);
+  }
+
+  function setSmsField(field: string, value: unknown) {
+    set('SMS Settings', field, value);
+  }
+
+  async function loadDocs(doctypes: string[]) {
+    await Promise.all(doctypes.map(async dt => {
+      try {
+        const data = await readDoc(dt);
+        setDocs(prev => ({ ...prev, [dt]: data }));
+      } catch { /* ignore individual failures */ }
+    }));
+  }
+
+  async function loadShippingRules() {
+    try {
+      const r = await ff(`/api/resource/Shipping Rule?fields=["name","label","shipping_rule_type","disabled"]&limit=20`);
+      setShippingRules(r.data || []);
+    } catch { /* ignore */ }
+  }
+
+  async function loadNotifications() {
+    try {
+      const r = await ff(`/api/resource/Notification?fields=["name","subject","event","document_type","channel","enabled"]&filters=[["Notification","document_type","in","Sales Order,Delivery Note,Sales Invoice"]]&limit=50`);
+      setNotifications(r.data || []);
+    } catch { /* ignore */ }
+  }
+
+  async function loadEmailAccount() {
+    try {
+      const list = await ff(`/api/resource/Email Account?filters=[["default_outgoing","=",1]]&fields=["name","email_account_name","email_id","smtp_server","smtp_port","use_ssl","use_tls","password","always_use_account_email_id_as_sender"]&limit=1`);
+      const acc = (list.data || [])[0];
+      if (acc) {
+        const full = await ff(`/api/resource/Email Account/${encodeURIComponent(acc.name)}`);
+        setEmailDoc(full.data || acc);
+        setEmailAccName(acc.name);
+      }
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    setDirty(new Set());
+    switch (active) {
+      case 'general':       loadDocs(['Website Settings', 'System Settings']); break;
+      case 'payments':      loadDocs(['Razorpay Settings', 'Webshop Settings', 'Store Settings']); break;
+      case 'shipping':      loadShippingRules(); loadDocs(['Store Settings']); break;
+      case 'orders':        loadDocs(['Selling Settings', 'Store Settings']); break;
+      case 'reviews':       loadDocs(['Webshop Settings', 'Store Settings']); break;
+      case 'email':         loadEmailAccount(); setEmailDirty(false); break;
+      case 'notifications': loadNotifications(); loadDocs(['SMS Settings']); break;
+      case 'website':       loadDocs(['Website Settings', 'Webshop Settings']); break;
+      case 'security':      loadDocs(['System Settings']); break;
+      case 'tax':           loadDocs(['Accounts Settings']); break;
+    }
+  }, [active]);
+
+  function showToast(msg: string, type: 'success' | 'error') {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
   }
 
   async function save() {
     setSaving(true);
-    const mod = MODULES.find(m => m.id === active)!;
     try {
-      await saveDoc(mod.doctype, docs[active]);
-      showToast('Settings saved', 'success');
-      if (active === 'website') localStorage.removeItem('sb_site_config_v4');
-    } catch (e) { showToast((e as Error).message, 'error'); }
-    finally { setSaving(false); }
+      await Promise.all([...dirty].map(dt => saveDoc(dt, docs[dt])));
+      setDirty(new Set());
+      if (active === 'website' || active === 'general') {
+        localStorage.removeItem('sb_site_config_v4');
+      }
+      showToast('Settings saved successfully', 'success');
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to save settings', 'error');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const mod = MODULES.find(m => m.id === active)!;
-  const data = docs[active];
-  const isLoaded = loaded[active];
+  async function saveEmail() {
+    if (!emailAccName) return;
+    setSaving(true);
+    try {
+      await ff(`/api/resource/Email Account/${encodeURIComponent(emailAccName)}`, { method: 'PUT', body: JSON.stringify({ data: emailDoc }) });
+      setEmailDirty(false);
+      showToast('Email settings saved', 'success');
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to save email settings', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleNotification(name: string, enabled: boolean) {
+    try {
+      await ff(`/api/resource/Notification/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ data: { enabled: enabled ? 1 : 0 } }) });
+      setNotifications(prev => prev.map(n => n.name === name ? { ...n, enabled: enabled ? 1 : 0 } : n));
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to update notification', 'error');
+    }
+  }
+
+  const activeSection = SECTIONS.find(s => s.id === active);
+  const filteredSections = search ? SECTIONS.filter(s => s.label.toLowerCase().includes(search.toLowerCase())) : SECTIONS;
+  const showSaveBar = dirty.size > 0 && active !== 'users' && active !== 'notifications' && active !== 'email';
+
+  function renderSection() {
+    switch (active) {
+      case 'general':       return <GeneralSection docs={docs} set={set} />;
+      case 'users':         return <UsersSection />;
+      case 'payments':      return <PaymentsSection docs={docs} set={set} />;
+      case 'shipping':      return <ShippingSection docs={docs} set={set} shippingRules={shippingRules} />;
+      case 'orders':        return <OrdersSection docs={docs} set={set} />;
+      case 'reviews':       return <ReviewsSection docs={docs} set={set} />;
+      case 'email':         return <EmailSection emailDoc={emailDoc} emailAccName={emailAccName} setEmailField={setEmailField} dirty={emailDirty} onSave={saveEmail} saving={saving} />;
+      case 'notifications': return <NotificationsSection notifications={notifications} onToggle={toggleNotification} smsDocs={docs['SMS Settings'] || {}} setSmsField={setSmsField} />;
+      case 'website':       return <WebsiteSection docs={docs} set={set} />;
+      case 'security':      return <SecuritySection docs={docs} set={set} />;
+      case 'tax':           return <TaxSection docs={docs} set={set} />;
+      default:              return null;
+    }
+  }
 
   return (
-    <AdminLayout title="Settings" subtitle="Manage site, system and selling configuration">
+    <AdminLayout title="Settings" subtitle="Manage store configuration">
+      <div className="settings-layout">
+        {/* Sidebar */}
+        <div className="settings-sidebar">
+          <div className="settings-search-wrap">
+            <input className="settings-search" placeholder="Search settings…" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <nav style={{ padding: '4px 0' }}>
+            {filteredSections.map(s => (
+              <button key={s.id} className={`settings-nav-item ${active === s.id ? 'active' : ''}`} onClick={() => setActive(s.id)}>
+                <span style={{ opacity: 0.7 }}>{s.icon}</span>
+                {s.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Content */}
+        <div className="settings-content">
+          <div className="settings-breadcrumb">
+            Settings <ChevronRight size={12} style={{ verticalAlign: 'middle', margin: '0 4px' }} />
+            <span className="active-crumb">{activeSection?.label}</span>
+          </div>
+
+          {renderSection()}
+
+          {showSaveBar && (
+            <div className="settings-save-bar">
+              <span style={{ color: '#64748b', fontSize: 13 }}>Unsaved changes in {[...dirty].join(', ')}</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="admin-btn" onClick={() => { setDirty(new Set()); setDocs({}); }}>Discard</button>
+                <button className="admin-btn-primary" onClick={save} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {toast && (
-        <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 9999, background: toast.type === 'success' ? '#064e3b' : '#7f1d1d', border: `1px solid ${toast.type === 'success' ? '#059669' : '#dc2626'}`, color: '#fff', padding: '11px 18px', borderRadius: 9, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', fontSize: 13, fontWeight: 600 }}>
-          {toast.type === 'success' ? '✓ ' : '✕ '}{toast.msg}
-        </div>
+        <div className={`settings-toast settings-toast-${toast.type}`}>{toast.msg}</div>
       )}
-
-      <div style={{ display: 'flex', gap: 0, height: 'calc(100vh - 116px)' }}>
-
-        {/* Left: module list */}
-        <aside style={{ width: 210, flexShrink: 0, background: '#151c2c', borderRadius: '10px 0 0 10px', border: '1px solid rgba(255,255,255,0.07)', borderRight: 'none', padding: '10px 0', overflowY: 'auto' }}>
-          <div style={{ padding: '6px 14px 10px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Settings</div>
-          {MODULES.map(m => (
-            <button key={m.id} onClick={() => setActive(m.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', background: active === m.id ? 'rgba(99,102,241,0.13)' : 'none', border: 'none', borderLeft: active === m.id ? '3px solid #6366f1' : '3px solid transparent', color: active === m.id ? '#818cf8' : 'rgba(255,255,255,0.48)', fontSize: 13, fontWeight: active === m.id ? 700 : 400, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-              <span style={{ opacity: active === m.id ? 1 : 0.5 }}>{m.icon}</span>{m.label}
-            </button>
-          ))}
-        </aside>
-
-        {/* Center: form */}
-        <main style={{ flex: 1, background: '#1a2233', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <div style={{ padding: '16px 24px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>{mod.label}</div>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-            {!isLoaded
-              ? <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 60 }}>Loading…</div>
-              : <>
-                  {active === 'website' && <WebsiteForm d={data} s={set} />}
-                  {active === 'system' && <SystemForm d={data} s={set} />}
-                  {active === 'selling' && <SellingForm d={data} s={set} />}
-                  {active === 'stock' && <StockForm d={data} s={set} />}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 20, marginTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                    <button onClick={save} disabled={saving} style={{ padding: '9px 26px', background: saving ? 'rgba(99,102,241,0.4)' : '#6366f1', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                      {saving ? 'Saving…' : 'Save Settings'}
-                    </button>
-                  </div>
-                </>
-            }
-          </div>
-        </main>
-
-        {/* Right: Attachments / Assign To / Share */}
-        <aside style={{ width: 230, flexShrink: 0, background: '#151c2c', borderRadius: '0 10px 10px 0', border: '1px solid rgba(255,255,255,0.07)', borderLeft: 'none', padding: '12px 10px', overflowY: 'auto' }}>
-          <div style={{ padding: '0 4px 10px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Document Actions</div>
-          {isLoaded && <>
-            <AttachmentsPanel doctype={mod.doctype} docname={mod.doctype} />
-            <AssignToPanel doctype={mod.doctype} docname={mod.doctype} />
-            <SharePanel doctype={mod.doctype} docname={mod.doctype} />
-          </>}
-        </aside>
-
-      </div>
     </AdminLayout>
   );
 }

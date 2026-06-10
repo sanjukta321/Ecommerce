@@ -5,21 +5,24 @@ import frappe
 
 
 @frappe.whitelist(allow_guest=True)
-def get_all_products(item_group=None, limit=20, offset=0):
-    """Return all products, accessible by guest, optionally filtered by item_group."""
+def get_all_products(item_group=None, limit=20, offset=0, is_new_arrival=None):
+    """Return all products, accessible by guest, optionally filtered by item_group or is_new_arrival."""
     if frappe.session.user == "Guest":
         frappe.set_user("Administrator")
 
     filters = {"disabled": 0, "variant_of": ["is", "not set"]}
     if item_group:
         filters["item_group"] = item_group
+    if is_new_arrival is not None and int(is_new_arrival) == 1:
+        filters["is_new_arrival"] = 1
 
     items = frappe.get_all(
         "Item",
         filters=filters,
-        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled", "has_variants"],
+        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled", "has_variants", "is_new_arrival"],
         limit=int(limit),
         start=int(offset),
+        order_by="creation desc",
     )
 
     if not items:
@@ -209,10 +212,10 @@ def get_all_products(item_group=None, limit=20, offset=0):
             if url not in lst:
                 lst.append(url)
 
-    base_url = frappe.utils.get_url()
-
     def _resolve_img(img):
-        return img if img.startswith("http") else base_url + img
+        # Keep external URLs as-is; keep relative /files/ paths relative
+        # so the browser resolves them against the current host correctly.
+        return img
 
     for item in items:
         if item.get("has_variants"):
@@ -234,7 +237,12 @@ def get_all_products(item_group=None, limit=20, offset=0):
             raw = [item["image"]]
         item["images"] = [_resolve_img(i) for i in raw if i]
 
-    total_count = frappe.db.count("Item", filters={"disabled": 0, "variant_of": ["is", "not set"], **({"item_group": item_group} if item_group else {})})
+    count_filters = {"disabled": 0, "variant_of": ["is", "not set"]}
+    if item_group:
+        count_filters["item_group"] = item_group
+    if is_new_arrival is not None and int(is_new_arrival) == 1:
+        count_filters["is_new_arrival"] = 1
+    total_count = frappe.db.count("Item", filters=count_filters)
     return {"items": items, "total": total_count, "offset": int(offset), "limit": int(limit)}
 
 
@@ -268,7 +276,6 @@ def get_product(item_code):
     item["has_variants"]  = frappe.db.get_value("Item", item_code, "has_variants") or 0
 
     # Fetch gallery images: Website Slideshow (admin) + File attachments, merged
-    base_url = frappe.utils.get_url()
     IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg')
 
     wi_info = frappe.db.get_value("Website Item", {"item_code": item_code}, ["name", "slideshow"], as_dict=True)
@@ -299,13 +306,9 @@ def get_product(item_code):
             raw_imgs.append(url)
 
     if raw_imgs:
-        item["images"] = [
-            (i if i.startswith("http") or i.startswith("data:") else base_url + i)
-            for i in raw_imgs
-        ]
+        item["images"] = raw_imgs
     elif item.get("image"):
-        img = item["image"]
-        item["images"] = [img if img.startswith("http") or img.startswith("data:") else base_url + img]
+        item["images"] = [item["image"]]
     else:
         item["images"] = []
 
@@ -381,7 +384,6 @@ def get_item_variants(item_code):
         if ip["item_code"] not in price_map:
             price_map[ip["item_code"]] = ip["price_list_rate"]
 
-    base_url = frappe.utils.get_url()
     IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg')
 
     # Source 1: SS-{variant_code} slideshows (admin dashboard)
@@ -420,17 +422,12 @@ def get_item_variants(item_code):
     result = []
     for v in variants:
         img = v["image"] or ""
-        if img and not img.startswith("http") and not img.startswith("data:"):
-            img = base_url + img
         price = float(price_map.get(v["name"]) or v["standard_rate"] or 0)
         raw = ss_img_map.get(v["name"], [])[:]
         for url in file_img_map.get(v["name"], []):
             if url not in raw:
                 raw.append(url)
-        images_list = [
-            (i if i.startswith("http") or i.startswith("data:") else base_url + i)
-            for i in raw
-        ] if raw else ([img] if img else [])
+        images_list = raw if raw else ([img] if img else [])
         entry: dict = {"item_code": v["name"], "price": price, "image": img, "images": images_list}
         entry.update(attr_map.get(v["name"], {}))
         result.append(entry)

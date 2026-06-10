@@ -67,6 +67,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
     const [reviews, setReviews] = useState<any[]>([]);
     const [reviewable, setReviewable] = useState<any[]>([]);
     const [reviewsLoading, setReviewsLoading] = useState(false);
+    const [allowReviewImages, setAllowReviewImages] = useState(false);
     const [notifPrefs, setNotifPrefs] = useState({ enable_email: true, enable_mention: true, enable_assignment: true, enable_share: true });
 
     // ── Photo state ───────────────────────────────────────────
@@ -343,9 +344,31 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         Promise.all([
             api<{ message: any[] }>('/api/method/store_customizations.api.reviews.get_user_reviews'),
             api<{ message: any[] }>('/api/method/store_customizations.api.reviews.get_reviewable_items'),
-        ]).then(([rv, ri]) => {
-            setReviews(rv.message || []);
+            api<{ message: { allow_review_images?: number } }>('/api/method/store_customizations.api.store_settings.get'),
+        ]).then(async ([rv, ri, ss]) => {
+            const userReviews: any[] = rv.message || [];
+            const names = userReviews.map((r: any) => r.name);
+            if (names.length) {
+                try {
+                    const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+                    const filter = encodeURIComponent(JSON.stringify([
+                        ['attached_to_doctype', '=', 'Item Review'],
+                        ['attached_to_name', 'in', names],
+                        ['is_private', '=', 0],
+                    ]));
+                    const res = await fetch(`${BASE}/api/resource/File?filters=${filter}&fields=["attached_to_name","file_url"]&limit=500`, { credentials: 'include' });
+                    const json = await res.json();
+                    const filesMap: Record<string, string[]> = {};
+                    for (const f of (json.data || [])) {
+                        if (!filesMap[f.attached_to_name]) filesMap[f.attached_to_name] = [];
+                        filesMap[f.attached_to_name].push(f.file_url);
+                    }
+                    for (const r of userReviews) r.images = filesMap[r.name] || [];
+                } catch { /* non-fatal */ }
+            }
+            setReviews(userReviews);
             setReviewable(ri.message || []);
+            setAllowReviewImages(!!(ss.message?.allow_review_images));
         }).catch(() => {}).finally(() => setReviewsLoading(false));
     };
 
@@ -835,10 +858,16 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                         <ReviewsSection
                             reviews={reviews}
                             reviewable={reviewable}
+                            allowImages={allowReviewImages}
                             onReviewSaved={r => {
-                                setReviews(prev => [r, ...prev]);
+                                setReviews(prev => {
+                                    const idx = prev.findIndex(x => x.name === r.name);
+                                    if (idx >= 0) { const next = [...prev]; next[idx] = r; return next; }
+                                    return [r, ...prev];
+                                });
                                 setReviewable(prev => prev.filter(i => i.item_code !== r.item));
                             }}
+                            onReviewDeleted={name => setReviews(prev => prev.filter(r => r.name !== name))}
                         />
                     )}
                     {activeSection === 'notifications' && (

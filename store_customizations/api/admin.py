@@ -50,6 +50,20 @@ def _reconcile_stock(item_code, qty, warehouse=None, valuation_rate=None):
     sr.submit()
 
 
+def _reattach_files(image_urls, item_code):
+    """Re-attach any File records that were uploaded to 'new-item' to the real item_code."""
+    for url in (image_urls or []):
+        if not url or not url.startswith('/files/'):
+            continue
+        orphans = frappe.get_all(
+            "File",
+            filters={"file_url": url, "attached_to_doctype": "Item", "attached_to_name": "new-item"},
+            pluck="name",
+        )
+        for fname in orphans:
+            frappe.db.set_value("File", fname, "attached_to_name", item_code)
+
+
 def _current_stock(item_code):
     """Return summed actual_qty across all warehouses."""
     result = frappe.db.sql(
@@ -100,7 +114,7 @@ def get_admin_products(limit=200):
     items = frappe.get_all(
         "Item",
         filters={"variant_of": ["is", "not set"]},
-        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled", "has_variants"],
+        fields=["name", "item_name", "item_group", "standard_rate", "image", "description", "disabled", "has_variants", "is_new_arrival"],
         order_by="creation desc",
         limit=int(limit),
     )
@@ -208,7 +222,7 @@ def update_item_stock(item_code, qty, warehouse=None):
 def save_admin_product(
     item_name, item_group, price,
     stock_qty=0, description="", image="", images=None, published=1,
-    item_code=None,
+    item_code=None, is_new_arrival=0,
 ):
     """
     Create or update a product with its price and stock in one atomic call.
@@ -255,16 +269,24 @@ def save_admin_product(
     item.description  = description or ""
     item.image        = images[0] if images else ""
     item.disabled     = 0 if published else 1
+    item.is_new_arrival = 1 if int(is_new_arrival) else 0
     item.is_stock_item = 1
     if not item.stock_uom:
         item.stock_uom = "Nos"
+    # india_compliance requires HSN code — set a placeholder if missing
+    if frappe.db.has_column("Item", "gst_hsn_code") and not item.get("gst_hsn_code"):
+        item.gst_hsn_code = "00000000"
 
     if item_code:
+        item.flags.ignore_links = True
         item.save(ignore_permissions=True)
     else:
-        item.insert(ignore_permissions=True)
+        item.insert(ignore_permissions=True, ignore_links=True)
 
     item_code = item.name
+
+    # Re-attach any uploaded files that landed on 'new-item' to the real item_code
+    _reattach_files(images, item_code)
 
     # Website Item + Slideshow for multi-image support
     wi_name = frappe.db.get_value("Website Item", {"item_code": item_code}, "name")
@@ -279,8 +301,9 @@ def save_admin_product(
     wi.published     = 1 if published else 0
     if images:
         wi.website_image = images[0]
+    old_ss = wi.get("slideshow") or ""
     if len(images) > 1:
-        ss_name = wi.slideshow or f"SS-{item_code}"
+        ss_name = old_ss or f"SS-{item_code}"
         if frappe.db.exists("Website Slideshow", ss_name):
             ss = frappe.get_doc("Website Slideshow", ss_name)
             ss.set("slideshow_items", [])
@@ -294,13 +317,20 @@ def save_admin_product(
         else:
             ss.save(ignore_permissions=True)
         wi.slideshow = ss.name
-    elif frappe.db.exists("Website Slideshow", f"SS-{item_code}"):
-        frappe.delete_doc("Website Slideshow", f"SS-{item_code}", ignore_permissions=True)
+        old_ss = ""  # kept/updated, don't delete
+    else:
+        # Unlink slideshow before saving — Frappe blocks delete while link exists
         wi.slideshow = ""
+
+    # Save Website Item
     if wi.is_new():
         wi.insert(ignore_permissions=True)
     else:
         wi.save(ignore_permissions=True)
+
+    # Delete orphan slideshow now that the link is cleared
+    if old_ss and frappe.db.exists("Website Slideshow", old_ss):
+        frappe.delete_doc("Website Slideshow", old_ss, ignore_permissions=True)
 
     # ── 2. Item Price ─────────────────────────────────────────────────────────
     price_list = (
@@ -339,7 +369,7 @@ def save_admin_product(
 @frappe.whitelist()
 def save_template_product(
     item_name, item_group, description="", published=1,
-    attributes=None, variants=None, images=None, item_code=None,
+    attributes=None, variants=None, images=None, item_code=None, is_new_arrival=0,
 ):
     """
     Create or update a template item with its variants, prices, stock, and images.
@@ -383,7 +413,11 @@ def save_template_product(
     template.item_group   = item_group
     template.description  = description or ""
     template.disabled     = 0 if published else 1
+    template.is_new_arrival = 1 if int(is_new_arrival) else 0
     template.has_variants = 1
+    # india_compliance requires HSN code — set a placeholder if missing
+    if frappe.db.has_column("Item", "gst_hsn_code") and not template.get("gst_hsn_code"):
+        template.gst_hsn_code = "00000000"
     template.is_stock_item = 0  # stock tracked on variants, not template
     if not template.stock_uom:
         template.stock_uom = "Nos"
@@ -398,11 +432,15 @@ def save_template_product(
         template.append("attributes", {"attribute": attr["attribute"]})
 
     if template.is_new():
-        template.insert(ignore_permissions=True)
+        template.insert(ignore_permissions=True, ignore_links=True)
     else:
+        template.flags.ignore_links = True
         template.save(ignore_permissions=True)
 
     template_code = template.name
+
+    # Re-attach uploaded files from 'new-item' to the real template_code
+    _reattach_files(images, template_code)
 
     # ── 2. Website Item for the template ─────────────────────────────────────
     wi_name = frappe.db.get_value("Website Item", {"item_code": template_code}, "name")
@@ -419,8 +457,9 @@ def save_template_product(
         wi.website_image = images[0]
 
     # Multiple images → Website Slideshow
+    old_ss_tpl = wi.get("slideshow") or ""
     if len(images) > 1:
-        ss_name = wi.slideshow or f"SS-{template_code}"
+        ss_name = old_ss_tpl or f"SS-{template_code}"
         if frappe.db.exists("Website Slideshow", ss_name):
             ss = frappe.get_doc("Website Slideshow", ss_name)
             ss.set("slideshow_items", [])
@@ -434,11 +473,17 @@ def save_template_product(
         else:
             ss.save(ignore_permissions=True)
         wi.slideshow = ss.name
+        old_ss_tpl = ""  # kept/updated, don't delete
+    else:
+        wi.slideshow = ""  # unlink before save
 
     if wi.is_new():
         wi.insert(ignore_permissions=True)
     else:
         wi.save(ignore_permissions=True)
+
+    if old_ss_tpl and frappe.db.exists("Website Slideshow", old_ss_tpl):
+        frappe.delete_doc("Website Slideshow", old_ss_tpl, ignore_permissions=True)
 
     # ── 3. Variants ───────────────────────────────────────────────────────────
     created_variants = []

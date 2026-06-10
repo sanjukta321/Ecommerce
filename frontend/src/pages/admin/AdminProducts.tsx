@@ -8,7 +8,7 @@ interface Item {
   name: string; item_name: string; item_group: string;
   standard_rate: number; selling_price?: number; image?: string;
   description?: string; disabled?: number; actual_qty?: number;
-  has_variants?: number; variant_count?: number;
+  has_variants?: number; variant_count?: number; is_new_arrival?: number;
 }
 interface ItemGroup { name: string; parent_item_group: string; is_group: number; }
 interface AttrDef { name: string; values: string[]; }
@@ -26,10 +26,12 @@ interface VariantRow {
 interface SimpleForm {
   item_name: string; item_group: string; standard_rate: string;
   description: string; images: string[]; published: boolean; stock_qty: string;
+  is_new_arrival: boolean;
 }
 const BLANK_SIMPLE: SimpleForm = {
   item_name: '', item_group: '', standard_rate: '',
   description: '', images: [''], published: true, stock_qty: '0',
+  is_new_arrival: false,
 };
 
 // ── Template wizard state ──────────────────────────────────────────────────
@@ -40,6 +42,7 @@ interface WizardState {
   item_group: string;
   description: string;
   published: boolean;
+  is_new_arrival: boolean;
   // Step 2
   selectedAttrs: { attribute: string; values: string[] }[];
   variants: VariantRow[];
@@ -50,7 +53,7 @@ interface WizardState {
 }
 
 const BLANK_WIZARD: WizardState = {
-  step: 1, item_name: '', item_group: '', description: '', published: true,
+  step: 1, item_name: '', item_group: '', description: '', published: true, is_new_arrival: false,
   selectedAttrs: [], variants: [], images: [''],
 };
 
@@ -70,7 +73,7 @@ function imgSrc(url?: string) {
 
 // ── Image upload helper ────────────────────────────────────────────────────
 
-async function uploadProductImage(file: File): Promise<string> {
+async function uploadProductImage(file: File, itemCode = 'new-item'): Promise<string> {
   const csrf =
     (window as any).frappe?.csrf_token ||
     document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
@@ -79,7 +82,7 @@ async function uploadProductImage(file: File): Promise<string> {
   fd.append('file', file);
   fd.append('is_private', '0');
   fd.append('doctype', 'Item');
-  fd.append('docname', 'new-item');
+  fd.append('docname', itemCode);
   const res = await fetch(`${BASE}/api/method/upload_file`, {
     method: 'POST',
     credentials: 'include',
@@ -98,9 +101,10 @@ interface ImageUploadSlotProps {
   onChange: (url: string) => void;
   isPrimary?: boolean;
   compact?: boolean;
+  itemCode?: string;
 }
 
-function ImageUploadSlot({ url, onChange, isPrimary = false, compact = false }: ImageUploadSlotProps) {
+function ImageUploadSlot({ url, onChange, isPrimary = false, compact = false, itemCode }: ImageUploadSlotProps) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -111,7 +115,7 @@ function ImageUploadSlot({ url, onChange, isPrimary = false, compact = false }: 
     e.target.value = '';
     setBusy(true); setErr('');
     try {
-      const fileUrl = await uploadProductImage(file);
+      const fileUrl = await uploadProductImage(file, itemCode || 'new-item');
       onChange(fileUrl);
     } catch (ex) {
       setErr((ex as Error).message);
@@ -355,24 +359,28 @@ export default function AdminProducts() {
   const openSimpleEdit = async (item: Item) => {
     setSimpleEdit(item);
     setSimpleError(''); setMode('simple');
-    // Base form with single image; will be overwritten by slideshow fetch below
+    const initialImages = item.image ? [item.image] : [''];
     setSimpleForm({
       item_name: item.item_name || '',
       item_group: item.item_group || itemGroups[0]?.name || '',
       standard_rate: String(item.selling_price ?? item.standard_rate ?? ''),
       description: item.description || '',
-      images: item.image ? [item.image] : [''],
+      images: initialImages,
       published: !item.disabled,
       stock_qty: String(item.actual_qty ?? 0),
+      is_new_arrival: !!item.is_new_arrival,
     });
-    // Fetch full gallery images (slideshow) via public product API
+    // Fetch full gallery — only apply if user hasn't already changed the images
     try {
       const d = await api<{ message: { images?: string[] } }>(
         `/api/method/store_customizations.api.products.get_product?item_code=${encodeURIComponent(item.name)}`
       );
       const imgs = d.message?.images;
       if (imgs && imgs.length > 0) {
-        setSimpleForm(f => ({ ...f, images: imgs }));
+        setSimpleForm(f => {
+          const untouched = JSON.stringify(f.images) === JSON.stringify(initialImages);
+          return untouched ? { ...f, images: imgs } : f;
+        });
       }
     } catch {}
   };
@@ -390,9 +398,10 @@ export default function AdminProducts() {
         price:       parseFloat(simpleForm.standard_rate),
         stock_qty:   stock,
         description: simpleForm.description,
-        images:      JSON.stringify(simpleForm.images.filter(Boolean)),
-        published:   simpleForm.published ? 1 : 0,
-        item_code:   simpleEdit ? simpleEdit.name : null,
+        images:          JSON.stringify(simpleForm.images.filter(Boolean)),
+        published:       simpleForm.published ? 1 : 0,
+        is_new_arrival:  simpleForm.is_new_arrival ? 1 : 0,
+        item_code:       simpleEdit ? simpleEdit.name : null,
       });
       setMode('none'); fetchItems();
     } catch (e) { setSimpleError(e instanceof Error ? e.message : 'Save failed.'); }
@@ -418,10 +427,11 @@ export default function AdminProducts() {
       const t = d.message;
       setWizard({
         step: 1,
-        item_name:    t.item_name,
-        item_group:   t.item_group,
-        description:  t.description,
-        published:    t.published,
+        item_name:      t.item_name,
+        item_group:     t.item_group,
+        description:    t.description,
+        published:      t.published,
+        is_new_arrival: !!(t as any).is_new_arrival,
         selectedAttrs: (t.attributes || []).map((a: {attribute: string}) => ({
           attribute: a.attribute,
           values: t.attr_values?.[a.attribute] || [],
@@ -555,11 +565,12 @@ export default function AdminProducts() {
     setWizSaving(true); setWizError('');
     try {
       await post('/api/method/store_customizations.api.admin.save_template_product', {
-        item_name:   wizard.item_name.trim(),
-        item_group:  wizard.item_group,
-        description: wizard.description,
-        published:   wizard.published ? 1 : 0,
-        attributes:  JSON.stringify(wizard.selectedAttrs.map(a => ({ attribute: a.attribute }))),
+        item_name:      wizard.item_name.trim(),
+        item_group:     wizard.item_group,
+        description:    wizard.description,
+        published:      wizard.published ? 1 : 0,
+        is_new_arrival: wizard.is_new_arrival ? 1 : 0,
+        attributes:     JSON.stringify(wizard.selectedAttrs.map(a => ({ attribute: a.attribute }))),
         variants:    JSON.stringify(wizard.variants.map(v => ({
           attrs: v.attrs,
           price: parseFloat(v.price) || 0,
@@ -743,7 +754,12 @@ export default function AdminProducts() {
                           : <div style={{ width: 40, height: 40, borderRadius: 6, background: '#e2e8f0' }} />}
                       </td>
                       <td style={{ fontWeight: 600, color: '#0f172a', maxWidth: 200 }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item_name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item_name}</span>
+                          {!!item.is_new_arrival && (
+                            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>✨ New</span>
+                          )}
+                        </div>
                         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{item.name}</div>
                         {isTemplate && (
                           <button type="button" onClick={() => toggleTemplate(item.name)}
@@ -851,62 +867,73 @@ export default function AdminProducts() {
       {mode === 'simple' && (
         <div className="admin-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMode('none'); }}>
           <div className="admin-modal">
-            <h2 className="admin-modal-title">{simpleEdit ? 'Edit Product' : 'Add Simple Product'}</h2>
-            {simpleError && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 16 }}>{simpleError}</div>}
+            <div className="admin-modal-body">
+              <h2 className="admin-modal-title">{simpleEdit ? 'Edit Product' : 'Add Simple Product'}</h2>
 
-            <div className="admin-form-group">
-              <label className="admin-form-label">Item Name *</label>
-              <input className="admin-form-input" placeholder="e.g. Wireless Headphones" value={simpleForm.item_name} onChange={e => setSimpleForm(f => ({ ...f, item_name: e.target.value }))} />
-            </div>
-            <div className="admin-form-group">
-              <label className="admin-form-label">Item Group</label>
-              <GroupSelect value={simpleForm.item_group} onChange={v => setSimpleForm(f => ({ ...f, item_group: v }))} />
-            </div>
-            <div className="admin-form-group">
-              <label className="admin-form-label">Price (₹) *</label>
-              <input className="admin-form-input" type="number" placeholder="0.00" min="0" step="0.01" value={simpleForm.standard_rate} onChange={e => setSimpleForm(f => ({ ...f, standard_rate: e.target.value }))} />
-            </div>
-            <div className="admin-form-group">
-              <label className="admin-form-label">Description</label>
-              <textarea className="admin-form-textarea" placeholder="Product description…" value={simpleForm.description} onChange={e => setSimpleForm(f => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div className="admin-form-group">
-              <label className="admin-form-label">Images</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
-                {simpleForm.images.map((img, idx) => (
-                  <ImageUploadSlot
-                    key={idx}
-                    url={img}
-                    isPrimary={idx === 0}
-                    onChange={url => setSimpleForm(f => {
-                      const imgs = [...f.images];
-                      imgs[idx] = url;
-                      const cleaned = imgs.filter((u, i) => u || i === 0);
-                      return { ...f, images: cleaned.length ? cleaned : [''] };
-                    })}
-                  />
-                ))}
-                {simpleForm.images.length < 10 && (
-                  <button type="button"
-                    onClick={() => setSimpleForm(f => ({ ...f, images: [...f.images, ''] }))}
-                    style={{ width: 56, height: 56, border: '1.5px dashed #a5b4fc', borderRadius: 8,
-                      background: '#f5f3ff', color: '#6366f1', fontSize: 22, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="Add image">+</button>
-                )}
+              <div className="admin-form-group">
+                <label className="admin-form-label">Item Name *</label>
+                <input className="admin-form-input" placeholder="e.g. Wireless Headphones" value={simpleForm.item_name} onChange={e => setSimpleForm(f => ({ ...f, item_name: e.target.value }))} />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Item Group</label>
+                <GroupSelect value={simpleForm.item_group} onChange={v => setSimpleForm(f => ({ ...f, item_group: v }))} />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Price (₹) *</label>
+                <input className="admin-form-input" type="number" placeholder="0.00" min="0" step="0.01" value={simpleForm.standard_rate} onChange={e => setSimpleForm(f => ({ ...f, standard_rate: e.target.value }))} />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Description</label>
+                <textarea className="admin-form-textarea" placeholder="Product description…" value={simpleForm.description} onChange={e => setSimpleForm(f => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">Images</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
+                  {simpleForm.images.map((img, idx) => (
+                    <ImageUploadSlot
+                      key={idx}
+                      url={img}
+                      isPrimary={idx === 0}
+                      itemCode={simpleEdit?.name}
+                      onChange={url => setSimpleForm(f => {
+                        const imgs = [...f.images];
+                        imgs[idx] = url;
+                        const cleaned = imgs.filter((u, i) => u || i === 0);
+                        return { ...f, images: cleaned.length ? cleaned : [''] };
+                      })}
+                    />
+                  ))}
+                  {simpleForm.images.length < 10 && (
+                    <button type="button"
+                      onClick={() => setSimpleForm(f => ({ ...f, images: [...f.images, ''] }))}
+                      style={{ width: 56, height: 56, border: '1.5px dashed #a5b4fc', borderRadius: 8,
+                        background: '#f5f3ff', color: '#6366f1', fontSize: 22, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Add image">+</button>
+                  )}
+                </div>
+              </div>
+              <div className="admin-form-group">
+                <label className="admin-form-label">{simpleEdit ? 'Stock Quantity' : 'Initial Stock'}</label>
+                <input className="admin-form-input" type="number" placeholder="0" min="0" step="1" value={simpleForm.stock_qty} onChange={e => setSimpleForm(f => ({ ...f, stock_qty: e.target.value }))} />
+              </div>
+              <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input id="simple-pub" type="checkbox" checked={simpleForm.published} onChange={e => setSimpleForm(f => ({ ...f, published: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                <label htmlFor="simple-pub" className="admin-form-label" style={{ margin: 0, cursor: 'pointer' }}>Published (visible on website)</label>
+              </div>
+              <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <input id="simple-new-arrival" type="checkbox" checked={simpleForm.is_new_arrival} onChange={e => setSimpleForm(f => ({ ...f, is_new_arrival: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#f59e0b' }} />
+                <label htmlFor="simple-new-arrival" className="admin-form-label" style={{ margin: 0, cursor: 'pointer' }}>
+                  ✨ New Arrival <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 400 }}>(shows in New Arrivals section)</span>
+                </label>
               </div>
             </div>
-            <div className="admin-form-group">
-              <label className="admin-form-label">{simpleEdit ? 'Stock Quantity' : 'Initial Stock'}</label>
-              <input className="admin-form-input" type="number" placeholder="0" min="0" step="1" value={simpleForm.stock_qty} onChange={e => setSimpleForm(f => ({ ...f, stock_qty: e.target.value }))} />
-            </div>
-            <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <input id="simple-pub" type="checkbox" checked={simpleForm.published} onChange={e => setSimpleForm(f => ({ ...f, published: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-              <label htmlFor="simple-pub" className="admin-form-label" style={{ margin: 0, cursor: 'pointer' }}>Published (visible on website)</label>
-            </div>
             <div className="admin-modal-actions">
-              <button className="admin-btn-secondary" onClick={() => setMode('none')} disabled={simpleSaving}>Cancel</button>
-              <button className="admin-btn-primary" onClick={saveSimple} disabled={simpleSaving}>{simpleSaving ? 'Saving…' : simpleEdit ? 'Save Changes' : 'Add Product'}</button>
+              {simpleError && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#dc2626' }}>{simpleError}</div>}
+              <div className="admin-modal-actions-row">
+                <button className="admin-btn-secondary" onClick={() => setMode('none')} disabled={simpleSaving}>Cancel</button>
+                <button className="admin-btn-primary" onClick={saveSimple} disabled={simpleSaving}>{simpleSaving ? 'Saving…' : simpleEdit ? 'Save Changes' : 'Add Product'}</button>
+              </div>
             </div>
           </div>
         </div>
@@ -916,6 +943,7 @@ export default function AdminProducts() {
       {mode === 'wizard' && (
         <div className="admin-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMode('none'); }}>
           <div className="admin-modal" style={{ maxWidth: 680 }}>
+          <div className="admin-modal-body">
 
             {/* Step indicator */}
             <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderRadius: 10, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
@@ -934,8 +962,6 @@ export default function AdminProducts() {
                 );
               })}
             </div>
-
-            {wizError && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 16 }}>{wizError}</div>}
 
             {/* ── Step 1: Basic Info ──────────────────────────────────────── */}
             {wizard.step === 1 && (
@@ -1037,6 +1063,7 @@ export default function AdminProducts() {
                                       url={imgUrl}
                                       isPrimary={imgIdx === 0}
                                       compact
+                                      itemCode={wizard.editCode}
                                       onChange={url => {
                                         if (!url && v.images.length > 1) {
                                           removeVariantImage(idx, imgIdx);
@@ -1083,6 +1110,7 @@ export default function AdminProducts() {
                         key={idx}
                         url={img}
                         isPrimary={idx === 0}
+                        itemCode={wizard.editCode}
                         onChange={url => setWizard(w => {
                           const imgs = [...w.images];
                           imgs[idx] = url;
@@ -1106,6 +1134,12 @@ export default function AdminProducts() {
                   <input id="wiz-pub" type="checkbox" checked={wizard.published} onChange={e => setWizard(w => ({ ...w, published: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer' }} />
                   <label htmlFor="wiz-pub" className="admin-form-label" style={{ margin: 0, cursor: 'pointer' }}>Published (visible on website)</label>
                 </div>
+                <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input id="wiz-new-arrival" type="checkbox" checked={wizard.is_new_arrival} onChange={e => setWizard(w => ({ ...w, is_new_arrival: e.target.checked }))} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#f59e0b' }} />
+                  <label htmlFor="wiz-new-arrival" className="admin-form-label" style={{ margin: 0, cursor: 'pointer' }}>
+                    ✨ New Arrival <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 400 }}>(shows in New Arrivals section)</span>
+                  </label>
+                </div>
 
                 {/* Summary */}
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13 }}>
@@ -1115,11 +1149,15 @@ export default function AdminProducts() {
                 </div>
 
                 <div className="admin-modal-actions">
-                  <button className="admin-btn-secondary" onClick={() => setWizard(w => ({ ...w, step: 2 }))} disabled={wizSaving}>← Back</button>
-                  <button className="admin-btn-primary" onClick={saveWizard} disabled={wizSaving}>{wizSaving ? 'Saving…' : wizard.editCode ? 'Save Changes' : 'Create Product'}</button>
+                  {wizError && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#dc2626' }}>{wizError}</div>}
+                  <div className="admin-modal-actions-row">
+                    <button className="admin-btn-secondary" onClick={() => setWizard(w => ({ ...w, step: 2 }))} disabled={wizSaving}>← Back</button>
+                    <button className="admin-btn-primary" onClick={saveWizard} disabled={wizSaving}>{wizSaving ? 'Saving…' : wizard.editCode ? 'Save Changes' : 'Create Product'}</button>
+                  </div>
                 </div>
               </>
             )}
+          </div>
           </div>
         </div>
       )}

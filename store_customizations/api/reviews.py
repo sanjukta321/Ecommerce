@@ -30,6 +30,17 @@ def get_item_reviews(item_code):
         order_by="creation desc",
         limit=50,
     )
+    review_names = [r["name"] for r in reviews]
+    # Fetch attached images from Frappe File table (built-in attachment system)
+    attachments_raw = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Item Review", "attached_to_name": ["in", review_names], "is_private": 0},
+        fields=["attached_to_name", "file_url"],
+    ) if review_names else []
+    attachments_map: dict = {}
+    for a in attachments_raw:
+        attachments_map.setdefault(a["attached_to_name"], []).append(a["file_url"])
+
     result = []
     for r in reviews:
         # Mask the user email — show only the display name
@@ -41,6 +52,7 @@ def get_item_reviews(item_code):
             "review_title": r["review_title"] or "",
             "comment":      r["comment"] or "",
             "creation":     str(r["creation"])[:10],
+            "images":       attachments_map.get(r["name"], []),
         })
 
     avg = round(sum(r["rating"] for r in result) / len(result), 1) if result else 0
@@ -146,3 +158,78 @@ def save_item_review(item_code, rating, title, body):
     doc.save(ignore_permissions=True)
     frappe.db.commit()
     return {"name": doc.name, "item": item_code}
+
+
+@frappe.whitelist()
+def get_all_reviews_for_admin(published=None):
+    """Return all Item Review records for admin management. Requires System Manager role."""
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("Only System Managers can access this endpoint.", frappe.PermissionError)
+
+    filters = {}
+    if published is not None:
+        published = int(published)
+        if published == 1:
+            filters["published_on"] = ["is", "set"]
+        else:
+            filters["published_on"] = ["is", "not set"]
+
+    reviews = frappe.get_all(
+        "Item Review",
+        filters=filters,
+        fields=["name", "item", "user", "customer", "rating", "review_title", "comment", "creation", "published_on"],
+        order_by="creation desc",
+        limit=500,
+    )
+
+    review_names = [r["name"] for r in reviews]
+
+    # Fetch all attachments for these reviews in a single query
+    attachments_raw = frappe.get_all(
+        "File",
+        filters={
+            "attached_to_doctype": "Item Review",
+            "attached_to_name": ["in", review_names],
+            "is_private": 0,
+        },
+        fields=["attached_to_name", "file_url"],
+    ) if review_names else []
+
+    attachments_map: dict = {}
+    for a in attachments_raw:
+        attachments_map.setdefault(a["attached_to_name"], []).append(a["file_url"])
+
+    result = []
+    for r in reviews:
+        item_name = frappe.db.get_value("Item", r["item"], "item_name") or r["item"]
+        display_name = frappe.db.get_value("User", r["user"], "full_name") or r["user"].split("@")[0]
+        result.append({
+            "name":         r["name"],
+            "item":         r["item"],
+            "item_name":    item_name,
+            "reviewer":     display_name,
+            "rating":       round(float(r["rating"] or 0) * 5, 1),
+            "review_title": r["review_title"] or "",
+            "comment":      r["comment"] or "",
+            "creation":     str(r["creation"])[:10],
+            "images":       attachments_map.get(r["name"], []),
+            "published":    r["published_on"] is not None,
+        })
+
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
+def toggle_review_published(review_name, published):
+    """Publish or unpublish a review. Requires System Manager role."""
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("Only System Managers can access this endpoint.", frappe.PermissionError)
+
+    doc = frappe.get_doc("Item Review", review_name)
+    if int(published) == 1:
+        doc.published_on = frappe.utils.now()
+    else:
+        doc.published_on = None
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"success": True}

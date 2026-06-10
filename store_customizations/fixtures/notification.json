@@ -1,0 +1,58 @@
+[
+ {
+  "name": "SB Store - Order Placed",
+  "doctype": "Notification",
+  "enabled": 1,
+  "channel": "Email",
+  "document_type": "Sales Order",
+  "event": "New",
+  "subject": "Your Order {{ doc.name }} has been placed!",
+  "message": "Dear {{ doc.customer_name }},\n\nThank you for shopping with us! Your order **{{ doc.name }}** has been successfully placed.\n\n**Order Date:** {{ doc.transaction_date }}\n**Total Amount:** ₹{{ doc.grand_total }}\n\nWe will notify you once your order is confirmed and shipped.\n\nThank you,\nSB Store Team",
+  "message_type": "Markdown",
+  "send_to_all_assignees": 0,
+  "recipients": [
+   {
+    "receiver_by_document_field": "contact_email",
+    "cc": ""
+   }
+  ]
+ },
+ {
+  "name": "SB Store - Order Shipped",
+  "doctype": "Notification",
+  "enabled": 1,
+  "channel": "Email",
+  "document_type": "Delivery Note",
+  "event": "Submit",
+  "subject": "Your Order has been shipped!",
+  "message": "Dear {{ doc.customer_name }},\n\nGreat news! Your order has been shipped.\n\n**Delivery Note:** {{ doc.name }}\n**Posting Date:** {{ doc.posting_date }}\n\nYour order is on its way and will be delivered within 3-7 business days.\n\nThank you,\nSB Store Team",
+  "message_type": "Markdown",
+  "send_to_all_assignees": 0,
+  "recipients": [
+   {
+    "receiver_by_document_field": "contact_email",
+    "cc": ""
+   }
+  ]
+ },
+ {
+  "name": "SB Store - Return Approved",
+  "doctype": "Notification",
+  "enabled": 1,
+  "channel": "Email",
+  "document_type": "Sales Invoice",
+  "event": "Submit",
+  "condition_type": "Python",
+  "condition": "doc.is_return == 1",
+  "subject": "Your Return/Refund has been approved",
+  "message": "Dear {{ doc.customer_name }},\n\nYour return request has been approved.\n\n**Credit Note:** {{ doc.name }}\n**Refund Amount:** ₹{{ doc.grand_total | abs }}\n\nThe refund will be processed within 5-7 business days.\n\nThank you,\nSB Store Team",
+  "message_type": "Markdown",
+  "send_to_all_assignees": 0,
+  "recipients": [
+   {
+    "receiver_by_document_field": "contact_email",
+    "cc": ""
+   }
+  ]
+ }
+]

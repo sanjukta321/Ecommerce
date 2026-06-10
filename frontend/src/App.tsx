@@ -50,6 +50,7 @@ import NewArrivals from './pages/NewArrivals';
 import SearchResults from './pages/SearchResults';
 import SellerLanding from './pages/SellerLanding';
 import DealOfTheDay from './components/DealOfTheDay';
+import ChatWidget from './components/ChatWidget';
 import Wishlist from './pages/Wishlist';
 import Orders from './pages/Orders';
 import Checkout from './pages/Checkout';
@@ -68,6 +69,7 @@ const AdminProducts    = lazy(() => import('./pages/admin/AdminProducts'));
 const AdminOrders      = lazy(() => import('./pages/admin/AdminOrders'));
 const AdminSellers     = lazy(() => import('./pages/admin/AdminSellers'));
 const AdminCustomers   = lazy(() => import('./pages/admin/AdminCustomers'));
+const AdminReviews     = lazy(() => import('./pages/admin/AdminReviews'));
 const AdminReports     = lazy(() => import('./pages/admin/AdminReports'));
 const AdminSettings    = lazy(() => import('./pages/admin/AdminSettings'));
 
@@ -161,12 +163,14 @@ function AppInner() {
           <Route path="/admin/orders"        element={<AdminOrders />} />
           <Route path="/admin/sellers"       element={<AdminSellers />} />
           <Route path="/admin/customers"     element={<AdminCustomers />} />
+          <Route path="/admin/reviews"       element={<AdminReviews />} />
           <Route path="/admin/reports"       element={<AdminReports />} />
           <Route path="/admin/settings"      element={<AdminSettings />} />
         </Routes>
       </Suspense>
       </ErrorBoundary>
       {!isSellerRoute && !isAdminRoute && <DealOfTheDay />}
+      {!isSellerRoute && !isAdminRoute && <ChatWidget />}
     </div>
   );
 }

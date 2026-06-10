@@ -368,6 +368,155 @@
     color: var(--accent);
 }
 
+/* Remove item confirmation dialog */
+.remove-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.remove-dialog {
+    background: var(--input-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 28px 28px 24px;
+    width: min(420px, calc(100vw - 32px));
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.remove-dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.remove-dialog-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(255, 107, 107, 0.12);
+    color: #ff6b6b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.remove-dialog-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0 0 3px;
+}
+
+.remove-dialog-name {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+}
+
+.remove-dialog-msg {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin: 0 0 22px;
+}
+
+.remove-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.remove-dialog-wishlist {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 11px 16px;
+    background: var(--accent);
+    color: var(--bg-main);
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: filter 0.2s;
+    white-space: nowrap;
+}
+
+.remove-dialog-wishlist:hover {
+    filter: brightness(1.1);
+}
+
+.remove-dialog-cancel {
+    padding: 11px 18px;
+    background: var(--glass);
+    border: 1px solid var(--input-border);
+    color: var(--text-main);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    white-space: nowrap;
+}
+
+.remove-dialog-cancel:hover {
+    border-color: var(--accent);
+    background: var(--input-bg);
+}
+
+.remove-dialog-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 11px 18px;
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid #ff6b6b;
+    color: #ff6b6b;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
+}
+
+.remove-dialog-delete:hover {
+    background: #ff6b6b;
+    color: #fff;
+}
+
+@media (max-width: 480px) {
+    .remove-dialog-actions {
+        grid-template-columns: 1fr;
+    }
+}
+
 .save-for-later-btn.wishlisted {
     color: var(--accent);
 }

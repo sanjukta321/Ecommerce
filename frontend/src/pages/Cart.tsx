@@ -10,13 +10,27 @@ const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const Cart: React.FC = () => {
     const navigate = useNavigate();
     const { cart, removeFromCart, updateQuantity, clearCart, cartTotal } = useCart();
-    const { addToWishlist, isWishlisted } = useWishlist();
+    const { addToWishlist } = useWishlist();
 
     const totalQty = cart.reduce((a, i) => a + i.quantity, 0);
+
+    const [removeCandidate, setRemoveCandidate] = useState<typeof cart[0] | null>(null);
 
     const handleMoveToWishlist = (item: typeof cart[0]) => {
         addToWishlist({ id: item.id, name: item.name, price: item.price, image: item.image });
         removeFromCart(item.id, item.size);
+    };
+
+    const confirmMoveToWishlist = () => {
+        if (!removeCandidate) return;
+        handleMoveToWishlist(removeCandidate);
+        setRemoveCandidate(null);
+    };
+
+    const confirmDelete = () => {
+        if (!removeCandidate) return;
+        removeFromCart(removeCandidate.id, removeCandidate.size);
+        setRemoveCandidate(null);
     };
 
     const [couponInput, setCouponInput] = useState('');
@@ -110,13 +124,6 @@ const Cart: React.FC = () => {
                                     >{item.name}</h3>
                                     <p className="item-size">Size: <span>{item.size}</span></p>
                                     <p className="item-price">₹{item.price.toLocaleString('en-IN')}</p>
-                                    <button
-                                        className={`save-for-later-btn${isWishlisted(item.id) ? ' wishlisted' : ''}`}
-                                        onClick={() => handleMoveToWishlist(item)}
-                                    >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill={isWishlisted(item.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-                                        {isWishlisted(item.id) ? 'Saved to Wishlist' : 'Save for Later'}
-                                    </button>
                                 </div>
                                 <div className="item-controls">
                                     <div className="qty-controls">
@@ -127,7 +134,7 @@ const Cart: React.FC = () => {
                                     <p className="item-subtotal">₹{(item.price * item.quantity).toLocaleString('en-IN')}</p>
                                     <button
                                         className="remove-item-btn"
-                                        onClick={() => removeFromCart(item.id, item.size)}
+                                        onClick={() => setRemoveCandidate(item)}
                                         title="Remove"
                                     >
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -215,6 +222,38 @@ const Cart: React.FC = () => {
                 </div>
             </div>
             <Footer />
+
+            {removeCandidate && (
+                <div className="remove-dialog-overlay" onClick={() => setRemoveCandidate(null)}>
+                    <div className="remove-dialog glass-effect" onClick={e => e.stopPropagation()}>
+                        <div className="remove-dialog-header">
+                            <div className="remove-dialog-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="remove-dialog-title">Remove Item?</h3>
+                                <p className="remove-dialog-name">{removeCandidate.name}</p>
+                            </div>
+                        </div>
+                        <p className="remove-dialog-msg">What would you like to do with this item?</p>
+                        <div className="remove-dialog-actions">
+                            <button className="remove-dialog-wishlist" onClick={confirmMoveToWishlist}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+                                Move to Wishlist
+                            </button>
+                            <button className="remove-dialog-cancel" onClick={() => setRemoveCandidate(null)}>
+                                Cancel
+                            </button>
+                            <button className="remove-dialog-delete" onClick={confirmDelete}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

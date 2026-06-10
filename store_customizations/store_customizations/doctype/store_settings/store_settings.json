@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "creation": "2026-06-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "payments_section",
+  "enable_cod",
+  "shipping_section",
+  "enable_pincode_check",
+  "orders_section",
+  "auto_confirm_orders",
+  "allow_cancellation",
+  "return_window_days",
+  "invoice_auto_generation",
+  "reviews_section",
+  "require_approval_for_reviews",
+  "allow_review_images",
+  "max_rating"
+ ],
+ "fields": [
+  {
+   "fieldname": "payments_section",
+   "fieldtype": "Section Break",
+   "label": "Payments"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_cod",
+   "fieldtype": "Check",
+   "label": "Enable Cash on Delivery"
+  },
+  {
+   "fieldname": "shipping_section",
+   "fieldtype": "Section Break",
+   "label": "Shipping"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_pincode_check",
+   "fieldtype": "Check",
+   "label": "Enable Pincode-based Delivery Check"
+  },
+  {
+   "fieldname": "orders_section",
+   "fieldtype": "Section Break",
+   "label": "Orders"
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_confirm_orders",
+   "fieldtype": "Check",
+   "label": "Auto Confirm Orders"
+  },
+  {
+   "default": "1",
+   "fieldname": "allow_cancellation",
+   "fieldtype": "Check",
+   "label": "Allow Order Cancellation"
+  },
+  {
+   "default": "7",
+   "fieldname": "return_window_days",
+   "fieldtype": "Int",
+   "label": "Return Window (Days)"
+  },
+  {
+   "default": "0",
+   "fieldname": "invoice_auto_generation",
+   "fieldtype": "Check",
+   "label": "Auto Generate Invoice on Order"
+  },
+  {
+   "fieldname": "reviews_section",
+   "fieldtype": "Section Break",
+   "label": "Reviews"
+  },
+  {
+   "default": "0",
+   "fieldname": "require_approval_for_reviews",
+   "fieldtype": "Check",
+   "label": "Require Approval Before Publishing Review"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_review_images",
+   "fieldtype": "Check",
+   "label": "Allow Images in Reviews"
+  },
+  {
+   "default": "5",
+   "fieldname": "max_rating",
+   "fieldtype": "Int",
+   "label": "Max Rating (Stars)"
+  }
+ ],
+ "is_single": 1,
+ "links": [],
+ "modified": "2026-06-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Store Customizations",
+ "name": "Store Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

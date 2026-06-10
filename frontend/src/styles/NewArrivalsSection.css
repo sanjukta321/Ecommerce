@@ -3,6 +3,19 @@
     margin-bottom: 40px;
 }
 
+.na-skeleton {
+    min-height: 340px;
+    background: linear-gradient(90deg, var(--glass) 25%, var(--input-bg) 50%, var(--glass) 75%);
+    background-size: 200% 100%;
+    animation: naSkeleton 1.4s infinite;
+    border-radius: 12px;
+}
+
+@keyframes naSkeleton {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
 .section-banner {
     background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
     color: white;
@@ -272,13 +285,14 @@
 .card-footer-actions {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
-    gap: 12px !important;
+    gap: 8px !important;
     width: 100% !important;
     margin-top: 15px;
 }
 
 .add-cart-btn {
     flex: 2;
+    min-width: 0;
     background: #ff3f6c;
     color: #ffffff;
     border: none;
@@ -289,6 +303,9 @@
     cursor: pointer;
     transition: all 0.3s ease;
     text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .add-cart-btn:hover {
@@ -307,10 +324,12 @@
     cursor: pointer;
     transition: all 0.3s ease;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 100px;
+    min-width: 0;
 }
 
 .view-details-btn:hover {
