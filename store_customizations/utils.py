@@ -9,6 +9,8 @@ _CSRF_BYPASS_CMDS = {
     "store_customizations.api.checkout.update_payment_status",
     "store_customizations.api.checkout.get_order_status",
     "store_customizations.api.chatbot.chat",
+    "store_customizations.api.payment_gateway.create_razorpay_order",
+    "store_customizations.api.payment_gateway.verify_razorpay_payment",
 }
 
 def bypass_csrf_for_checkout():

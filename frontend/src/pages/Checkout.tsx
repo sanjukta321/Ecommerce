@@ -91,7 +91,19 @@ const Checkout: React.FC = () => {
 
     // Step 4: Success
     const [orderId, setOrderId] = useState('');
-    const [invoiceId, setInvoiceId] = useState('');
+    const [, setInvoiceId] = useState('');
+
+    // Load Razorpay checkout script once; track readiness
+    const [, setRazorpayReady] = useState(!!(window as any).Razorpay);
+    useEffect(() => {
+        if ((window as any).Razorpay) { setRazorpayReady(true); return; }
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+        script.onload = () => setRazorpayReady(true);
+        document.body.appendChild(script);
+        return () => { document.body.removeChild(script); };
+    }, []);
 
     // Pre-fill mobile from logged-in user profile
     useEffect(() => {
@@ -276,6 +288,91 @@ const Checkout: React.FC = () => {
         setStep('payment');
     };
 
+    const openRazorpayModal = async (siName: string, soName: string) => {
+        if (!(window as any).Razorpay) {
+            setOrderError('Payment gateway not loaded. Please refresh and try again.');
+            setPlacing(false);
+            return;
+        }
+        const csrfToken = await getCsrfToken();
+        let rzpOrder: any;
+        try {
+            const rzpRes = await fetch(
+                `${BASE}/api/method/store_customizations.api.payment_gateway.create_razorpay_order?sales_invoice=${encodeURIComponent(siName)}`,
+                { credentials: 'include', headers: { 'X-Frappe-CSRF-Token': csrfToken } }
+            );
+            const rzpData = await rzpRes.json();
+            rzpOrder = rzpData.message;
+        } catch {
+            setOrderError('Could not initiate payment. Please try again.');
+            setPlacing(false);
+            return;
+        }
+
+        if (!rzpOrder?.razorpay_order_id) {
+            setOrderError('Could not initiate payment. Please try again.');
+            setPlacing(false);
+            return;
+        }
+
+        const options = {
+            key: rzpOrder.key_id,
+            amount: rzpOrder.amount,
+            currency: rzpOrder.currency || 'INR',
+            order_id: rzpOrder.razorpay_order_id,
+            name: 'SB Store',
+            description: `Order ${soName}`,
+            handler: async (response: any) => {
+                try {
+                    const verifyParams = new URLSearchParams({
+                        razorpay_order_id:   response.razorpay_order_id,
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_signature:  response.razorpay_signature,
+                        sales_invoice:       siName,
+                    });
+                    const verifyRes = await fetch(
+                        `${BASE}/api/method/store_customizations.api.payment_gateway.verify_razorpay_payment`,
+                        {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Frappe-CSRF-Token': await getCsrfToken(),
+                            },
+                            body: verifyParams.toString(),
+                        }
+                    );
+                    const verifyData = await verifyRes.json();
+                    if (verifyData.message?.success) {
+                        if (mobile) localStorage.setItem('checkout_mobile', mobile);
+                        if (!buyNowItem) {
+                            clearCart();
+                            localStorage.removeItem('applied_coupon');
+                        }
+                        setStep('success');
+                    } else {
+                        setOrderError('Payment verification failed. Please contact support with your order ID.');
+                    }
+                } catch {
+                    setOrderError('Payment verification error. Please contact support.');
+                } finally {
+                    setPlacing(false);
+                }
+            },
+            modal: {
+                ondismiss: () => {
+                    setOrderError('Payment cancelled. Your order is saved — you can retry from the Orders page.');
+                    setPlacing(false);
+                },
+            },
+            prefill: { contact: `+91${mobile}` },
+            theme: { color: '#D90462' },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+    };
+
     const handlePlaceOrder = async () => {
         setOrderError('');
         setPlacing(true);
@@ -289,18 +386,14 @@ const Checkout: React.FC = () => {
 
             const appliedCoupon = localStorage.getItem('applied_coupon') || '';
             const params = new URLSearchParams({
-                cart_items:          JSON.stringify(cartPayload),
-                address:             JSON.stringify(address),
-                payment_method:      paymentMethod,
-                mobile:              mobile,
+                cart_items:     JSON.stringify(cartPayload),
+                address:        JSON.stringify(address),
+                payment_method: paymentMethod,
+                mobile:         mobile,
             });
             if (appliedCoupon) params.set('coupon_code', appliedCoupon);
-            if (selectedSavedAddress) {
-                params.set('saved_address_name', selectedSavedAddress.name);
-            }
-            if (redeemLoyalty && loyaltyPointsToRedeem > 0) {
-                params.set('loyalty_points', String(loyaltyPointsToRedeem));
-            }
+            if (selectedSavedAddress) params.set('saved_address_name', selectedSavedAddress.name);
+            if (redeemLoyalty && loyaltyPointsToRedeem > 0) params.set('loyalty_points', String(loyaltyPointsToRedeem));
 
             const csrfToken = await getCsrfToken();
             const res = await fetch(
@@ -319,24 +412,33 @@ const Checkout: React.FC = () => {
             const data = await res.json();
 
             if (data.message?.success) {
-                setOrderId(data.message.sales_order || '');
-                setInvoiceId(data.message.sales_invoice || '');
-                if (mobile) localStorage.setItem('checkout_mobile', mobile);
-                if (!buyNowItem) {
-                    clearCart();
-                    localStorage.removeItem('applied_coupon');
+                const soName = data.message.sales_order || '';
+                const siName = data.message.sales_invoice || '';
+                setOrderId(soName);
+                setInvoiceId(siName);
+
+                if (paymentMethod === 'cod') {
+                    // COD: order confirmed, no payment needed now
+                    if (mobile) localStorage.setItem('checkout_mobile', mobile);
+                    if (!buyNowItem) {
+                        clearCart();
+                        localStorage.removeItem('applied_coupon');
+                    }
+                    setStep('success');
+                } else {
+                    // Online: open Razorpay modal — placing state stays true until modal completes
+                    await openRazorpayModal(siName, soName);
                 }
-                setStep('success');
             } else {
                 const errMsg =
                     data.exception?.split('\n').pop() ||
                     data._server_messages ||
                     'Order placement failed. Please try again.';
                 setOrderError(typeof errMsg === 'string' ? errMsg.replace(/^["\[]+|["\]]+$/g, '') : String(errMsg));
+                setPlacing(false);
             }
         } catch {
             setOrderError('Network error. Please check your connection and try again.');
-        } finally {
             setPlacing(false);
         }
     };
@@ -816,17 +918,11 @@ const Checkout: React.FC = () => {
                                         background: '#f0fdf4',
                                         border: '1px solid #bbf7d0',
                                         borderRadius: 10,
-                                        textAlign: 'left',
+                                        textAlign: 'center',
                                     }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                            <span style={{ fontSize: 13, color: '#6b7280' }}>Sales Order</span>
-                                            <strong style={{ fontFamily: 'monospace', color: '#15803d' }}>{orderId}</strong>
-                                            {invoiceId && (
-                                                <>
-                                                    <span style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Sales Invoice</span>
-                                                    <strong style={{ fontFamily: 'monospace', color: '#15803d' }}>{invoiceId}</strong>
-                                                </>
-                                            )}
+                                        <span style={{ fontSize: 13, color: '#6b7280' }}>Order Reference</span>
+                                        <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: '#15803d', marginTop: 4 }}>
+                                            #{orderId.split('-').pop()}
                                         </div>
                                     </div>
                                 )}

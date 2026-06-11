@@ -19,13 +19,15 @@
     margin-bottom: 15px;
 }
 
+/* Grid: fixed row height, uniform cells — all cards identical size */
 .lookbook-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    grid-auto-rows: minmax(300px, auto);
-    gap: 25px;
+    grid-auto-rows: 320px;
+    gap: 16px;
 }
 
+/* Card height = grid rows only (no content overflow) */
 .lookbook-card {
     position: relative;
     border-radius: 16px;
@@ -33,149 +35,168 @@
     cursor: pointer;
     background: var(--glass);
     border: 1px solid var(--glass-border);
-    display: flex;
-    flex-direction: column;
 }
 
+/* Image fills entire card cell */
 .lookbook-image {
-    position: relative;
+    position: absolute;
+    inset: 0;
+    width: 100%;
     height: 100%;
-    min-height: 250px;
-    overflow: hidden;
 }
 
-.lookbook-card img {
+.lookbook-image img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
     transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.lookbook-card:hover img {
+.lookbook-card:hover .lookbook-image img {
     transform: scale(1.08);
 }
 
-/* Asymmetrical Spans */
-.large {
-    grid-column: span 2;
-    grid-row: span 2;
+/* Info overlay — gradient at bottom, always visible */
+.lookbook-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 18px 18px;
+    background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.55) 55%, transparent 100%);
 }
 
-.medium {
-    grid-column: span 1;
-    grid-row: span 2;
+.lookbook-cat {
+    color: var(--accent);
+    font-size: 10px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    display: block;
+    margin-bottom: 5px;
 }
 
-.small {
+.lookbook-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.lookbook-title-row h3 {
+    font-size: 13px;
+    color: #ffffff;
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.3;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    flex: 1;
+}
+
+.lookbook-price {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* Actions — hidden by default, slide up on hover */
+.lookbook-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.lookbook-card:hover .lookbook-actions {
+    max-height: 50px;
+}
+
+.lookbook-card .action-btn {
+    padding: 8px 4px;
+    border: none;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.lookbook-card .view-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.5) !important;
+    color: #ffffff;
+    backdrop-filter: blur(4px);
+}
+
+.lookbook-card .view-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.lookbook-card .cart-btn {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.lookbook-card .cart-btn:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+/* All cards uniform 1×1 — equal size images */
+.large,
+.medium,
+.small,
+.tall {
     grid-column: span 1;
     grid-row: span 1;
 }
 
-.tall {
-    grid-column: span 1;
-    grid-row: span 2;
-}
-
-.lookbook-info {
-    padding: 30px;
+/* Skeleton loader */
+.lookbook-skeleton {
     background: var(--glass);
-    border-top: 1px solid var(--glass-border);
-    margin-top: auto;
+    cursor: default;
+    animation: lookbook-shimmer 1.5s ease-in-out infinite;
 }
 
-.lookbook-info .cat {
-    color: var(--accent);
-    font-size: 11px;
-    text-transform: uppercase;
-    font-weight: 700;
-    margin-bottom: 10px;
-    display: block;
+@keyframes lookbook-shimmer {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
 }
 
-.item-info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 20px;
-    width: 100%;
+/* Empty state */
+.lookbook-empty {
+    text-align: center;
+    padding: 60px 0;
+    color: var(--text-dim);
+    font-size: 15px;
 }
 
-.lookbook-overlay h3 {
-    font-size: 24px;
-    color: white;
-    margin: 0;
-}
-
-.lookbook-overlay .price {
-    color: var(--accent);
-    font-weight: 700;
-    font-size: 18px;
-}
-
-.lookbook-actions {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 15px !important;
-    width: 100% !important;
-    margin-top: 20px;
-}
-
-.lookbook-actions .action-btn {
-    padding: 12px 2px !important;
-    border: none !important;
-    border-radius: 6px !important;
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    cursor: pointer !important;
-    transition: var(--transition) !important;
-    white-space: nowrap !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-.lookbook-actions .view-btn {
-    background: #FFFFFF !important;
-    border: 1px solid var(--accent) !important;
-    color: var(--accent) !important;
-}
-
-.lookbook-actions .view-btn:hover {
-    background: var(--accent);
-    color: #FFFFFF;
-}
-
-.lookbook-actions .cart-btn {
-    background: var(--accent) !important;
-    color: #FFFFFF !important;
-}
-
-.lookbook-actions .cart-btn:hover {
-    filter: brightness(1.1);
-}
-
-.lookbook-actions .action-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-}
-
+/* Responsive */
 @media (max-width: 992px) {
     .lookbook-grid {
         grid-template-columns: repeat(2, 1fr);
-    }
-
-    .large,
-    .medium,
-    .small,
-    .tall {
-        grid-column: span 1;
-        grid-row: auto;
+        grid-auto-rows: 260px;
     }
 }
 
 @media (max-width: 576px) {
     .lookbook-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
+        grid-auto-rows: 180px;
+        gap: 10px;
     }
 }

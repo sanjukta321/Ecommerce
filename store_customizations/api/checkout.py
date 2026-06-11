@@ -177,29 +177,19 @@ def place_order(cart_items, address, payment_method, mobile=None, saved_address_
     # 3. Sales Invoice from submitted SO
     # COD: keep Draft → SO stays "To Deliver And Bill"; displayed as "Unpaid" in portal.
     #      SI submitted later in collect_cod_payment when payment is actually collected.
-    # Online: submit immediately so payment entry can be linked against it.
+    # Online (Razorpay): keep Draft → verified and submitted by verify_razorpay_payment
+    #                    after HMAC check confirms real payment.
     si = _checkout_create_sales_invoice(so, customer, loyalty_points=int(loyalty_points or 0))
-    frappe.db.commit()          # lock SI name before submit
-    if payment_method != "cod":
-        si.flags.ignore_permissions = True
-        si.submit()
-        frappe.db.commit()
+    frappe.db.commit()
 
-    # 4. Payment Entry (online only; COD needs no PE at checkout)
+    # PE not created here for online — Razorpay verification creates it after signature check.
     pe_name        = None
     payment_status = "cod" if payment_method == "cod" else "pending"
 
-    if payment_method != "cod":
-        try:
-            pe_name = _checkout_create_payment_entry(si, payment_method)
-            payment_status = "paid"
-        except Exception as exc:
-            frappe.log_error(str(exc), "Checkout: Payment Entry")
-            payment_status = "failed"
-
     frappe.db.commit()
 
-    if payment_status in ("paid", "cod"):
+    # Send confirmation email only for COD (online: sent after Razorpay verification)
+    if payment_status == "cod":
         try:
             from store_customizations.api.email_notifications import send_order_placed_email
             send_order_placed_email(so.name)
@@ -207,7 +197,7 @@ def place_order(cart_items, address, payment_method, mobile=None, saved_address_
             frappe.log_error(frappe.get_traceback(), "email: order placed")
 
     return {
-        "success":        payment_status in ("paid", "cod"),
+        "success":        True,   # Order created; frontend routes online to Razorpay modal
         "sales_order":    so.name,
         "sales_invoice":  si.name,
         "payment_entry":  pe_name,
@@ -545,6 +535,17 @@ def update_payment_status(sales_invoice, transaction_id, status, payment_method=
             except Exception as exc:
                 frappe.log_error(str(exc), "update_payment_status: Payment Entry")
                 return {"success": False, "error": str(exc)}
+
+        # Send order placed email now that payment is confirmed
+        so_name_for_email = frappe.db.get_value(
+            "Sales Invoice Item", {"parent": sales_invoice}, "sales_order"
+        )
+        if so_name_for_email:
+            try:
+                from store_customizations.api.email_notifications import send_order_placed_email
+                send_order_placed_email(so_name_for_email)
+            except Exception:
+                frappe.log_error(frappe.get_traceback(), "email: order placed (razorpay)")
 
         return {
             "success": True,
